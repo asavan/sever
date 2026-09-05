@@ -167,24 +167,24 @@ function updateDragAnimation() {
     leader.currentX += (leader.targetX - leader.currentX) * 0.35;
     leader.currentY += (leader.targetY - leader.currentY) * 0.35;
 
-    // Если мышка еще не сдвинулась с места клика, не ломаем позиционирование
-    if (Math.abs(leader.targetX) < 1 && Math.abs(leader.targetY) < 1) {
-        animationFrameId = requestAnimationFrame(updateDragAnimation);
-        return;
-    }
-
     dragGroup.forEach(item => {
         if (item.isLeader) {
-            // Лидер плавно смещается за мышью
+            // Лидер просто смещается на дельту движения мыши
             item.el.style.transform = `translate(${item.currentX}px, ${item.currentY}px)`;
         } else {
-            // Коэффициент притяжения: 1.0 — цифры летят строго на своих местах из сетки
-            // 0.5 — немного стягиваются к лидеру в полете
-            const compressionFactor = 1.0;
+            // КОЭФФИЦИЕНТ СТЯГИВАНИЯ (Баланс):
+            // 1.0 — цифры летят СТРОГО на своих местах из сетки (не разлетаются и не сжимаются).
+            // 0.6 — в полете цифры аккуратно и плавно притягиваются чуть ближе к лидеру.
+            // 0.0 — все прилипшие цифры полностью схлопнутся в одну точку под лидером.
+            const compressionFactor = 0.6;
 
-            item.targetX = leader.currentX + (item.gridOffsetX * compressionFactor);
-            item.targetY = leader.currentY + (item.gridOffsetY * compressionFactor);
+            // Математически верная формула смещения соседа относительно ЕГО СОБСТВЕННОЙ базы:
+            // Чтобы он оставался на месте, он должен повторять движение лидера (leader.currentX).
+            // Чтобы он притягивался, мы вычитаем часть его изначального отступа (gridOffsetX).
+            item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
+            item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
 
+            // Плавное догоняние (эффект вязкого резинового запаздывания)
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
 
@@ -194,6 +194,7 @@ function updateDragAnimation() {
 
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
+
 
 
 function checkBinsHover(x, y) {
