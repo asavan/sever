@@ -89,8 +89,10 @@ body {
     flex: 1;
     position: relative;
     padding: 15px;
-    overflow: hidden; /* Скрывает всё, что выходит за рамки при scale-зуме */
+    overflow: hidden;
     cursor: default;
+    /* КРИТИЧЕСКИ ДЛЯ МОБИЛЬНЫХ: отключает встроенный скролл страницы пальцем */
+    touch-action: none;
 }
 
 .matrix-grid {
