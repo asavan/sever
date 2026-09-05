@@ -14,7 +14,6 @@ let predefinedGroups = {};
 let virtualMatrix = [];
 let domCells = [];
 
-// Динамические уровни камеры для разных ориентаций
 let ZOOM_LEVELS = [];
 let currentZoomIndex = 0;
 let cameraColOffset = 0;
@@ -35,26 +34,17 @@ let initialPinchDistance = 0;
 let initialZoomOnPinchStart = 0;
 
 function initMatrix() {
-    // Детектим ориентацию экрана
     const isPortrait = window.innerHeight > window.innerWidth;
 
     if (isPortrait) {
-        COLS = 14; // Половинная ширина для портрета
+        COLS = 14;
         monitor.classList.add('is-portrait');
-        ZOOM_LEVELS = [
-            { viewCols: 14, viewRows: 12, fontSize: "14px" },
-            { viewCols: 9,  viewRows: 8,  fontSize: "24px" },
-            { viewCols: 5,  viewRows: 5,  fontSize: "38px" }
-        ];
     } else {
-        COLS = 28; // Стандарт для ландшафта
+        COLS = 28;
         monitor.classList.remove('is-portrait');
-        ZOOM_LEVELS = [
-            { viewCols: 28, viewRows: 12, fontSize: "14px" },
-            { viewCols: 18, viewRows: 8,  fontSize: "24px" },
-            { viewCols: 10, viewRows: 5,  fontSize: "38px" }
-        ];
     }
+
+    setupZoomLevels();
 
     TOTAL_NUMBERS = COLS * ROWS;
     grid.innerHTML = '';
@@ -67,7 +57,6 @@ function initMatrix() {
     cameraColOffset = 0;
     cameraRowOffset = 0;
 
-    // Генерируем адаптивную виртуальную матрицу
     for (let i = 0; i < TOTAL_NUMBERS; i++) {
         const r = Math.floor(i / COLS);
         const c = i % COLS;
@@ -78,7 +67,6 @@ function initMatrix() {
         });
     }
 
-    // Рассчитываем постоянные связи
     virtualMatrix.forEach(item => {
         const attachedIndices = [];
         virtualMatrix.forEach(neighbor => {
@@ -94,9 +82,34 @@ function initMatrix() {
 
     renderViewport();
 
-    // Защита от дублирования слушателей при ресайзе
     container.removeEventListener('wheel', onContainerWheel);
     container.addEventListener('wheel', onContainerWheel, { passive: false });
+}
+
+function setupZoomLevels() {
+    if (COLS === 14) {
+        ZOOM_LEVELS = [
+            { viewCols: 14, viewRows: 12, fontSize: "14px" },
+            { viewCols: 9,  viewRows: 8,  fontSize: "24px" },
+            { viewCols: 5,  viewRows: 5,  fontSize: "38px" }
+        ];
+    } else {
+        ZOOM_LEVELS = [
+            { viewCols: 28, viewRows: 12, fontSize: "14px" },
+            { viewCols: 18, viewRows: 8,  fontSize: "24px" },
+            { viewCols: 10, viewRows: 5,  fontSize: "38px" }
+        ];
+    }
+}
+
+function handleResize() {
+    const isPortrait = window.innerHeight > window.innerWidth;
+    if (isPortrait) {
+        monitor.classList.add('is-portrait');
+    } else {
+        monitor.classList.remove('is-portrait');
+    }
+    renderViewport();
 }
 
 function renderViewport() {
@@ -106,6 +119,9 @@ function renderViewport() {
     grid.style.setProperty('--view-cols', cfg.viewCols);
     grid.style.setProperty('--view-rows', cfg.viewRows);
     grid.style.setProperty('--cell-font-size', cfg.fontSize);
+
+    cameraColOffset = Math.max(0, Math.min(COLS - cfg.viewCols, cameraColOffset));
+    cameraRowOffset = Math.max(0, Math.min(ROWS - cfg.viewRows, cameraRowOffset));
 
     for (let r = 0; r < cfg.viewRows; r++) {
         for (let c = 0; c < cfg.viewCols; c++) {
@@ -315,7 +331,6 @@ function updateDragAnimation() {
         if (item.isLeader) {
             item.el.style.transform = "translate(" + item.currentX + "px, " + item.currentY + "px)";
         } else {
-            // ФИКС РАЗЛЕТА: Применяем математически верное смещение
             const compressionFactor = 0.6;
             item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
             item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
@@ -403,8 +418,7 @@ function updateBinProgress(binIndex, count) {
     }
 }
 
-// Слушаем поворот экрана и перезапускаем матрицу
-window.addEventListener('resize', initMatrix);
+window.addEventListener('resize', handleResize);
 
 container.addEventListener('pointerdown', onContainerPointerDown);
 container.addEventListener('pointermove', onContainerPointerMove);
@@ -412,3 +426,4 @@ container.addEventListener('pointerup', onContainerPointerUp);
 container.addEventListener('pointercancel', onContainerPointerUp);
 
 initMatrix();
+
