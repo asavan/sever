@@ -2,6 +2,7 @@ const COLS = 28;
 const ROWS = 12;
 const TOTAL_NUMBERS = COLS * ROWS;
 
+const container = document.getElementById('matrix-container');
 const grid = document.getElementById('matrix-grid');
 const totalPercentEl = document.getElementById('total-percent');
 const winScreen = document.getElementById('win-screen');
@@ -9,9 +10,13 @@ const winScreen = document.getElementById('win-screen');
 let removedCount = 0;
 let binProgress = Array(5).fill(0);
 let cells = [];
-
-// Карта постоянных связей
 let predefinedGroups = {};
+
+// Настройки оптического зума (Scale)
+let currentZoom = 1.0;
+const MIN_ZOOM = 1.0;
+const MAX_ZOOM = 2.5;
+const ZOOM_STEP = 0.25;
 
 // Состояние Drag&Drop
 let draggedElement = null;
@@ -19,7 +24,6 @@ let dragGroup = [];
 let isDragging = false;
 let animationFrameId = null;
 
-// Стартовая позиция курсора и текущие координаты
 let startX = 0;
 let startY = 0;
 let mouseX = 0;
@@ -31,7 +35,13 @@ function initMatrix() {
     removedCount = 0;
     binProgress = Array(5).fill(0);
     predefinedGroups = {};
+    currentZoom = 1.0;
 
+    // Сбрасываем трансформацию сетки
+    grid.style.transform = `scale(1)`;
+    grid.style.transformOrigin = 'center center';
+
+    // 1. Создаем эталонную матрицу 28х12
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
             const cell = document.createElement('div');
@@ -48,7 +58,7 @@ function initMatrix() {
         }
     }
 
-    // Генерируем постоянные связи
+    // 2. Генерируем постоянные связи один раз по базовой сетке
     cells.forEach(cell => {
         const index = parseInt(cell.dataset.index);
         const centerRow = parseInt(cell.dataset.row);
@@ -68,6 +78,34 @@ function initMatrix() {
         });
         predefinedGroups[index] = attachedIndices;
     });
+
+    // Слушатель колесика мыши вешаем на контейнер поля
+    container.addEventListener('wheel', onContainerWheel, { passive: false });
+}
+
+// Обработчик зума с удержанием точки под мышкой
+function onContainerWheel(e) {
+    e.preventDefault();
+
+    // Получаем координаты мыши строго внутри контейнера матрицы
+    const rect = container.getBoundingClientRect();
+    const mouseContainerX = e.clientX - rect.left;
+    const mouseContainerY = e.clientY - rect.top;
+
+    // Переводим пиксели в проценты для transform-origin
+    const originX = (mouseContainerX / rect.width) * 100;
+    const originY = (mouseContainerY / rect.height) * 100;
+
+    // Меняем коэффициент масштаба
+    if (e.deltaY < 0) {
+        if (currentZoom < MAX_ZOOM) currentZoom += ZOOM_STEP;
+    } else {
+        if (currentZoom > MIN_ZOOM) currentZoom -= ZOOM_STEP;
+    }
+
+    // Применяем центр и масштаб. Старая цифра останется ровно под курсором!
+    grid.style.transformOrigin = `${originX}% ${originY}%`;
+    grid.style.transform = `scale(${currentZoom})`;
 }
 
 function getAttachedGroup(centerCell) {
@@ -75,7 +113,11 @@ function getAttachedGroup(centerCell) {
     const leaderRow = parseInt(centerCell.dataset.row);
     const leaderCol = parseInt(centerCell.dataset.col);
 
-    // Добавляем лидера
+    // Так как масштаб применяется ко всей сетке, берем эталонные размеры ячейки без учета зума
+    // Это исключает любые искажения геометрии
+    const cellWidth = centerCell.offsetWidth || 30;
+    const cellHeight = centerCell.offsetHeight || 30;
+
     group.push({
         el: centerCell,
         currentX: 0,
@@ -90,10 +132,6 @@ function getAttachedGroup(centerCell) {
     const leaderIndex = parseInt(centerCell.dataset.index);
     const savedNeighborIndices = predefinedGroups[leaderIndex] || [];
 
-    // Примерный размер одной ячейки в пикселях для создания правильного масштаба смещения
-    const cellWidth = centerCell.offsetWidth || 30;
-    const cellHeight = centerCell.offsetHeight || 30;
-
     savedNeighborIndices.forEach(idx => {
         const cell = cells[idx];
         if (cell && cell.style.visibility !== 'hidden') {
@@ -107,7 +145,7 @@ function getAttachedGroup(centerCell) {
                 targetX: 0,
                 targetY: 0,
                 isLeader: false,
-                // Вычисляем смещение строго по разнице строк и колонок в сетке, а не по экрану
+                // Смещение высчитывается по эталонной сетке
                 gridOffsetX: (nc - leaderCol) * cellWidth,
                 gridOffsetY: (nr - leaderRow) * cellHeight
             });
@@ -159,32 +197,24 @@ function updateDragAnimation() {
 
     const leader = dragGroup.find(item => item.isLeader);
 
-    // Вычисляем чистый сдвиг мыши от точки клика
-    leader.targetX = mouseX - startX;
-    leader.targetY = mouseY - startY;
+    // Сдвиг мыши делим на текущий коэффициент зума, чтобы скорость движения пучка
+    // идеально соответствовала скорости курсора при любом приближении
+    leader.targetX = (mouseX - startX) / currentZoom;
+    leader.targetY = (mouseY - startY) / currentZoom;
 
-    // Мягкое сглаживание движения лидера за курсором (LERP)
     leader.currentX += (leader.targetX - leader.currentX) * 0.35;
     leader.currentY += (leader.targetY - leader.currentY) * 0.35;
 
     dragGroup.forEach(item => {
         if (item.isLeader) {
-            // Лидер просто смещается на дельту движения мыши
             item.el.style.transform = `translate(${item.currentX}px, ${item.currentY}px)`;
         } else {
-            // КОЭФФИЦИЕНТ СТЯГИВАНИЯ (Баланс):
-            // 1.0 — цифры летят СТРОГО на своих местах из сетки (не разлетаются и не сжимаются).
-            // 0.6 — в полете цифры аккуратно и плавно притягиваются чуть ближе к лидеру.
-            // 0.0 — все прилипшие цифры полностью схлопнутся в одну точку под лидером.
+            // Эффект стягивания в пучок (0.6 — кучка слегка сжимается к лидеру)
             const compressionFactor = 0.6;
 
-            // Математически верная формула смещения соседа относительно ЕГО СОБСТВЕННОЙ базы:
-            // Чтобы он оставался на месте, он должен повторять движение лидера (leader.currentX).
-            // Чтобы он притягивался, мы вычитаем часть его изначального отступа (gridOffsetX).
             item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
             item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
 
-            // Плавное догоняние (эффект вязкого резинового запаздывания)
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
 
@@ -194,8 +224,6 @@ function updateDragAnimation() {
 
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
-
-
 
 function checkBinsHover(x, y) {
     const bins = document.querySelectorAll('.bin');
