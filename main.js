@@ -196,16 +196,31 @@ function onContainerWheel(e) {
 
 function onContainerPointerDown(e) {
     const index = activeTouches.findIndex(t => t.pointerId === e.pointerId);
-    if (index > -1) activeTouches.splice(index, 1, e);
-    else activeTouches.push(e);
+    if (index > -1) {
+        activeTouches.splice(index, 1, e);
+    } else {
+        activeTouches.push(e);
+    }
 
-    if (activeTouches.length === 2 && !isDragging) {
-        const first = activeTouches.at(0);
-        const second = activeTouches.at(1);
-        initialPinchDistance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+    // Если на экране появилось 2 пальца (мультитач жестом Pinch)
+    if (activeTouches.length === 2) {
+        // ФИКС: Если в этот момент тащили цифру — сбрасываем фантомы, чтобы не зависали
+        if (isDragging) cancelDrag();
+
+        const firstTouch = activeTouches.at(0);
+        const secondTouch = activeTouches.at(1);
+
+        initialPinchDistance = getDistance(firstTouch, secondTouch);
         initialZoomOnPinchStart = currentZoomIndex;
+
+        const rect = container.getBoundingClientRect();
+        const midX = (firstTouch.clientX + secondTouch.clientX) / 2 - rect.left;
+        const midY = (firstTouch.clientY + secondTouch.clientY) / 2 - rect.top;
+
+        grid.style.transformOrigin = ((midX / rect.width) * 100) + "% " + ((midY / rect.height) * 100) + "%";
     }
 }
+
 
 function onContainerPointerMove(e) {
     const index = activeTouches.findIndex(t => t.pointerId === e.pointerId);
@@ -280,28 +295,6 @@ function getAttachedGroup(centerCell) {
     return group;
 }
 
-function onPointerDown(e) {
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
-    if (activeTouches.length >= 2 || isDragging) return;
-
-    draggedElement = e.currentTarget;
-    isDragging = true;
-    draggedElement.setPointerCapture(e.pointerId);
-
-    startX = e.clientX; startY = e.clientY;
-    mouseX = e.clientX; mouseY = e.clientY;
-
-    dragGroup = getAttachedGroup(draggedElement);
-    dragGroup.forEach(item => {
-        if (item.el) item.el.classList.add(item.isLeader ? 'dragging' : 'drag-group');
-    });
-
-    updateDragAnimation();
-    draggedElement.addEventListener('pointermove', onPointerMove);
-    draggedElement.addEventListener('pointerup', onPointerUp);
-    draggedElement.addEventListener('pointercancel', onPointerUp);
-}
-
 function onPointerMove(e) {
     if (!isDragging) return;
     mouseX = e.clientX; mouseY = e.clientY;
@@ -317,31 +310,124 @@ function onPointerMove(e) {
     });
 }
 
+function onPointerDown(e) {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (activeTouches.length >= 2 || isDragging) return;
+
+    draggedElement = e.currentTarget;
+    if (draggedElement.style.visibility === "hidden") return;
+
+    isDragging = true;
+    draggedElement.setPointerCapture(e.pointerId);
+
+    startX = e.clientX; startY = e.clientY;
+    mouseX = e.clientX; mouseY = e.clientY;
+
+    // Получаем группу реальных элементов
+    const rawGroup = getAttachedGroup(draggedElement);
+
+    // Получаем текущий размер шрифта из настроек камеры, чтобы передать его фантомам
+    const currentFontSize = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
+    document.documentElement.style.setProperty('--phantom-font-size', currentFontSize);
+
+    dragGroup = rawGroup.map(item => {
+        // Делаем реальную цифру в сетке временно невидимой
+        item.el.style.opacity = "0.0";
+
+        // Создаем её виртуального фантома в корне документа (body)
+        const phantom = document.createElement('div');
+        phantom.classList.add('phantom-cell');
+        phantom.classList.add(item.isLeader ? 'leader' : 'follower');
+        phantom.textContent = item.el.textContent;
+
+        // Замеряем стартовую позицию реальной цифры на экране, чтобы фантом появился ровно над ней
+        const rect = item.el.getBoundingClientRect();
+        phantom.style.left = rect.left + "px";
+        phantom.style.top = rect.top + "px";
+        phantom.style.width = rect.width + "px";
+        phantom.style.height = rect.height + "px";
+
+        document.body.appendChild(phantom);
+
+        return {
+            ...item,
+            phantomEl: phantom, // сохраняем ссылку на фантом
+            phantomStartX: rect.left,
+            phantomStartY: rect.top
+        };
+    });
+
+    updateDragAnimation();
+    draggedElement.addEventListener('pointermove', onPointerMove);
+    draggedElement.addEventListener('pointerup', onPointerUp);
+    draggedElement.addEventListener('pointercancel', onPointerUp);
+}
+
 function updateDragAnimation() {
     if (!isDragging) return;
+
     const leader = dragGroup.find(item => item.isLeader);
 
+    // 1. Вычисляем желаемый сдвиг лидера относительно точки старта
     leader.targetX = mouseX - startX;
     leader.targetY = mouseY - startY;
     leader.currentX += (leader.targetX - leader.currentX) * 0.35;
     leader.currentY += (leader.targetY - leader.currentY) * 0.35;
 
+    // 2. Получаем точные границы элемента .screen, за которые нельзя вылетать
+    const screenEl = document.querySelector('.screen');
+    const screenRect = screenEl.getBoundingClientRect();
+
     dragGroup.forEach(item => {
-        if (!item.el) return;
+        if (!item.phantomEl) return;
+
+        let finalX = 0;
+        let finalY = 0;
+
         if (item.isLeader) {
-            item.el.style.transform = "translate(" + item.currentX + "px, " + item.currentY + "px)";
+            // Идеальные экранные координаты лидера с учетом сдвига
+            finalX = item.phantomStartX + leader.currentX;
+            finalY = item.phantomStartY + leader.currentY;
         } else {
             const compressionFactor = 0.6;
+            // Идеальные экранные координаты ведомого соседа
             item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
             item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
 
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
-            item.el.style.transform = "translate(" + item.currentX + "px, " + item.currentY + "px)";
+
+            finalX = item.phantomStartX + item.currentX;
+            finalY = item.phantomStartY + item.currentY;
+        }
+
+        // 3. ЖЕСТКИЙ ОГРАНИЧИТЕЛЬ (CLAMP) ПО ГРАНИЦАМ SCREEN
+        // Ограничиваем координаты фантома, чтобы его края не выходили за рамки монитора
+        const pRect = item.phantomEl.getBoundingClientRect();
+
+        // Ограничение по горизонтали (X)
+        if (finalX < screenRect.left) finalX = screenRect.left;
+        if (finalX + pRect.width > screenRect.right) finalX = screenRect.right - pRect.width;
+
+        // Ограничение по вертикали (Y)
+        if (finalY < screenRect.top) finalY = screenRect.top;
+        if (finalY + pRect.height > screenRect.bottom) finalY = screenRect.bottom - pRect.height;
+
+        // 4. Переводим абсолютные ограниченные координаты обратно в transform translate
+        const clampedTranslateX = finalX - item.phantomStartX;
+        const clampedTranslateY = finalY - item.phantomStartY;
+
+        // Отрисовываем фантом
+        if (item.isLeader) {
+            item.phantomEl.style.transform = "translate(" + clampedTranslateX + "px, " + clampedTranslateY + "px) scale(1.4)";
+        } else {
+            item.phantomEl.style.transform = "translate(" + clampedTranslateX + "px, " + clampedTranslateY + "px)";
         }
     });
+
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
+
 
 function onPointerUp(e) {
     if (!isDragging) return;
@@ -360,16 +446,31 @@ function onPointerUp(e) {
         const binIndex = parseInt(droppedInBin.dataset.bin) - 1;
 
         dragGroup.forEach(item => {
+            // Удаляем фантом из body
+            if (item.phantomEl) item.phantomEl.remove();
+
+            // Навсегда прячем реальную цифру в виртуальной матрице
             const vItem = virtualMatrix.at(item.vIdx);
             if (vItem) vItem.visible = false;
-            if (item.el) resetElementStyles(item.el);
+
+            // Сбрасываем прозрачность на будущее
+            item.el.style.opacity = "";
         });
 
         updateBinProgress(binIndex, dragGroup.length);
         renderViewport();
     } else {
+        // Если промахнулись — возвращаем цифры на место с анимацией фантомов
         dragGroup.forEach(item => {
-            if (item.el) resetElementStyles(item.el);
+            if (item.phantomEl) {
+                item.phantomEl.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1)';
+                item.phantomEl.style.transform = 'translate(0px, 0px)';
+            }
+
+            setTimeout(() => {
+                if (item.phantomEl) item.phantomEl.remove();
+                item.el.style.opacity = ""; // Возвращаем видимость оригиналу в сетке
+            }, 300);
         });
     }
 
@@ -386,7 +487,10 @@ function onPointerUp(e) {
 function cancelDrag() {
     isDragging = false;
     cancelAnimationFrame(animationFrameId);
-    dragGroup.forEach(item => { if (item.el) resetElementStyles(item.el); });
+    dragGroup.forEach(item => {
+        if (item.phantomEl) item.phantomEl.remove();
+        item.el.style.opacity = "";
+    });
     draggedElement = null;
     dragGroup = [];
 }

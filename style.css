@@ -4,6 +4,7 @@
     --view-cols: 28;
     --view-rows: 12;
     --cell-font-size: 14px;
+    --phantom-font-size: 14px;
 }
 
 
@@ -54,24 +55,12 @@ body {
     overflow: hidden;
 }
 
-.screen {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    background-color: #011625;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border: 2px solid #04354f;
-}
-
 .crt-effects {
     position: absolute;
     top: 0; left: 0; width: 100%; height: 100%;
     background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 255, 0, 0.06));
     background-size: 100% 4px, 6px 100%;
-    z-index: 10;
+    z-index: 250; /* Поверх всех элементов игры */
     pointer-events: none;
     opacity: 0.4;
 }
@@ -96,14 +85,65 @@ body {
     letter-spacing: 1px;
 }
 
+.screen {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background-color: #011625;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 2px solid #04354f;
+    padding-bottom: 0; /* Сбрасываем прошлый отступ */
+}
+
 .matrix-container {
     flex: 1;
     position: relative;
-    padding: 10px;
-    overflow: hidden;
+    padding: 15px;
+    overflow: hidden; /* Жестко держит зум и убирает скроллы */
     cursor: default;
     touch-action: none;
 }
+
+.bottom-bar {
+    border-top: 2px solid #00567a;
+    padding: 10px 20px;
+    background-color: #011c2e;
+    color: #31a2cc;
+    position: relative;
+    z-index: 10; /* Обычный слой панели */
+}
+
+/* СТИЛИ ДЛЯ ВИРТУАЛЬНЫХ ФАНТОМОВ */
+/* Они создаются в корне страницы, поэтому летят абсолютно поверх всего */
+.phantom-cell {
+    position: fixed;
+    pointer-events: none; /* Чтобы фантом не мешал детектить коробки под ним */
+    font-family: 'Courier Prime', monospace;
+    font-weight: bold;
+    will-change: transform;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: none !important;
+}
+
+.phantom-cell.leader {
+    color: #ffffff !important;
+    text-shadow: 0 0 12px #4df3ff, 0 0 20px #4df3ff;
+    font-size: var(--phantom-font-size, 14px);
+    z-index: 9999; /* Выше абсолютно любого элемента на странице */
+}
+
+.phantom-cell.follower {
+    color: #8be4ff;
+    text-shadow: 0 0 6px #4df3ff;
+    font-size: var(--phantom-font-size, 14px);
+    z-index: 9998;
+}
+
 
 .matrix-grid {
     display: grid;
@@ -139,7 +179,7 @@ body {
     transition: none !important;
     color: #ffffff !important;
     text-shadow: 0 0 12px #4df3ff, 0 0 20px #4df3ff;
-    z-index: 100;
+    z-index: 100; /* Самый верхний слой для лидера кучки */
     cursor: grabbing;
 }
 
@@ -147,17 +187,10 @@ body {
     transition: none !important;
     color: #8be4ff;
     text-shadow: 0 0 6px #4df3ff;
-    z-index: 90;
+    z-index: 90; /* Чуть ниже лидера, но все еще выше коробок */
 }
 
-.bottom-bar {
-    border-top: 2px solid #00567a;
-    padding: 10px 15px;
-    background-color: #011c2e;
-    color: #31a2cc;
-    position: relative;
-    z-index: 110;
-}
+
 
 .bins-container {
     display: flex;
@@ -178,6 +211,7 @@ body {
     text-align: center;
     background: #01121f;
     transition: background-color 0.2s;
+    /* z-index убираем полностью */
 }
 
 .is-portrait .bin {
