@@ -378,19 +378,28 @@ function updateDragAnimation() {
     dragGroup.forEach(item => {
         if (!item.phantomEl) return;
 
-        let finalCenterX = (item.phantomStartX + (baseFontSize / 2)) + leader.currentX;
-        let finalCenterY = (item.phantomStartY + (baseFontSize / 2)) + leader.currentY;
+        let idealTranslateX = 0;
+        let idealTranslateY = 0;
 
-        if (!item.isLeader) {
+        // Восстановленный кусок логики смещений
+        if (item.isLeader) {
+            idealTranslateX = leader.currentX;
+            idealTranslateY = leader.currentY;
+        } else {
             const compressionFactor = 0.6;
             item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
             item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
 
-            finalCenterX = (item.phantomStartX + (baseFontSize / 2)) + item.currentX;
-            finalCenterY = (item.phantomStartY + (baseFontSize / 2)) + item.currentY;
+            idealTranslateX = item.currentX;
+            idealTranslateY = item.currentY;
         }
+
+        const cellW = item.phantomEl.offsetWidth || 30;
+        const cellH = item.phantomEl.offsetHeight || 30;
+        let finalCenterX = item.phantomStartX + (cellW / 2) + idealTranslateX;
+        let finalCenterY = item.phantomStartY + (cellH / 2) + idealTranslateY;
 
         const currentScale = item.isLeader ? 1.4 : 1.0;
         const visibleRadiusX = (baseFontSize * currentScale) / 2;
@@ -401,14 +410,15 @@ function updateDragAnimation() {
         if (finalCenterY - visibleRadiusY < screenRect.top) finalCenterY = screenRect.top + visibleRadiusY;
         if (finalCenterY > screenRect.bottom) finalCenterY = screenRect.bottom;
 
-        const finalTranslateX = (finalCenterX - visibleRadiusX) - item.phantomStartX;
-        const finalTranslateY = (finalCenterY - visibleRadiusY) - item.phantomStartY;
+        const finalTranslateX = (finalCenterX - (cellW / 2)) - item.phantomStartX;
+        const finalTranslateY = (finalCenterY - (cellH / 2)) - item.phantomStartY;
 
         item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px) scale(" + currentScale + ")";
     });
 
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
+
 
 function onPointerUp(e) {
     if (!isDragging) return;
