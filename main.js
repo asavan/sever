@@ -1,3 +1,4 @@
+let BASE_COLS = 28;
 let COLS = 28;
 const ROWS = 12;
 let TOTAL_NUMBERS = COLS * ROWS;
@@ -12,7 +13,6 @@ let removedCount = 0;
 let binProgress = Array(5).fill(0);
 let predefinedGroups = {};
 let virtualMatrix = [];
-let domCells = [];
 
 let ZOOM_LEVELS = [];
 let currentZoomIndex = 0;
@@ -29,7 +29,7 @@ let startY = 0;
 let mouseX = 0;
 let mouseY = 0;
 
-// Переменные для мобильного зума (Touch)
+let activeTouches = [];
 let initialPinchDistance = 0;
 let initialZoomOnPinchStart = 0;
 
@@ -38,9 +38,11 @@ function initMatrix() {
 
     if (isPortrait) {
         COLS = 14;
+        BASE_COLS = 14;
         monitor.classList.add('is-portrait');
     } else {
         COLS = 28;
+        BASE_COLS = 28;
         monitor.classList.remove('is-portrait');
     }
 
@@ -49,7 +51,6 @@ function initMatrix() {
     TOTAL_NUMBERS = COLS * ROWS;
     grid.innerHTML = '';
     virtualMatrix = [];
-    domCells = Array(TOTAL_NUMBERS).fill(null);
     removedCount = 0;
     binProgress = Array(5).fill(0);
     predefinedGroups = {};
@@ -58,8 +59,8 @@ function initMatrix() {
     cameraRowOffset = 0;
 
     for (let i = 0; i < TOTAL_NUMBERS; i++) {
-        const r = Math.floor(i / COLS);
-        const c = i % COLS;
+        const r = Math.floor(i / BASE_COLS);
+        const c = i % BASE_COLS;
         virtualMatrix.push({
             index: i, row: r, col: c,
             value: Math.floor(Math.random() * 10),
@@ -82,15 +83,8 @@ function initMatrix() {
 
     renderViewport();
 
-    // 1. Десктопный зум колесиком мыши
     container.removeEventListener('wheel', onContainerWheel);
     container.addEventListener('wheel', onContainerWheel, { passive: false });
-
-    // 2. Мобильный зум жестами Pinch (touchstart / touchmove)
-    container.addEventListener('touchstart', onContainerTouchStart, { passive: true });
-    container.addEventListener('touchmove', onContainerTouchMove, { passive: false });
-    container.addEventListener('touchend', onContainerTouchEnd);
-    container.addEventListener('touchcancel', onContainerTouchEnd);
 }
 
 function setupZoomLevels() {
@@ -136,7 +130,7 @@ function renderViewport() {
             const targetCol = cameraColOffset + c;
 
             if (targetRow >= 0 && targetRow < ROWS && targetCol >= 0 && targetCol < COLS) {
-                const vIdx = targetRow * COLS + targetCol;
+                const vIdx = targetRow * BASE_COLS + targetCol;
                 const vItem = virtualMatrix.at(vIdx);
 
                 if (vItem && vItem.visible) {
@@ -146,9 +140,10 @@ function renderViewport() {
                     cell.dataset.index = vItem.index;
                     cell.dataset.row = vItem.row;
                     cell.dataset.col = vItem.col;
+                    // Добавляем уникальный ID для бритвенно-точного поиска
+                    cell.id = "cell-id-" + vItem.index;
 
                     grid.appendChild(cell);
-                    domCells.splice(vIdx, 1, cell);
                     cell.addEventListener('pointerdown', onPointerDown);
                 } else {
                     grid.appendChild(document.createElement('div'));
@@ -201,26 +196,26 @@ function onContainerWheel(e) {
     }
 }
 
-// НАДЁЖНАЯ ТАЧ-ЛОГИКА ЗУМА: Срабатывает СТРОГО на смартфонах
 function onContainerTouchStart(e) {
     if (e.touches.length === 2) {
-        if (isDragging) cancelDrag(); // сбрасываем фантомы, чтобы не зависали
-
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        initialPinchDistance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-        initialZoomOnPinchStart = currentZoomIndex;
+        if (isDragging) cancelDrag();
+        const t1 = e.touches.item(0);
+        const t2 = e.touches.item(1);
+        if (t1 && t2) {
+            initialPinchDistance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+            initialZoomOnPinchStart = currentZoomIndex;
+        }
     }
 }
 
 function onContainerTouchMove(e) {
     if (e.touches.length === 2 && initialPinchDistance > 0) {
-        e.preventDefault(); // Запрещаем встроенный зум страницы браузером телефона
+        e.preventDefault();
+        const t1 = e.touches.item(0);
+        const t2 = e.touches.item(1);
+        if (!t1 || !t2) return;
 
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
         const currentDistance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-
         const ratio = currentDistance / initialPinchDistance;
         let targetIndex = initialZoomOnPinchStart;
 
@@ -232,7 +227,6 @@ function onContainerTouchMove(e) {
             const oldIdx = currentZoomIndex;
             currentZoomIndex = targetIndex;
 
-            // Центрируем камеру ровно между пальцами
             const rect = container.getBoundingClientRect();
             const midX = (t1.clientX + t2.clientX) / 2 - rect.left;
             const midY = (t1.clientY + t2.clientY) / 2 - rect.top;
@@ -252,14 +246,13 @@ function onContainerTouchEnd(e) {
     }
 }
 
-
 function getAttachedGroup(centerCell) {
     const group = [];
     const leaderIndex = parseInt(centerCell.dataset.index);
+    const vLeader = virtualMatrix.at(leaderIndex);
 
-    const leaderRect = centerCell.getBoundingClientRect();
-    const lCenterX = leaderRect.left + leaderRect.width / 2;
-    const lCenterY = leaderRect.top + leaderRect.height / 2;
+    const cellWidth = centerCell.offsetWidth || 30;
+    const cellHeight = centerCell.offsetHeight || 30;
 
     group.push({
         el: centerCell, vIdx: leaderIndex, currentX: 0, currentY: 0,
@@ -271,27 +264,71 @@ function getAttachedGroup(centerCell) {
     savedNeighborIndices.forEach(idx => {
         const vItem = virtualMatrix.at(idx);
         if (vItem && vItem.visible) {
-            const cell = domCells.at(idx);
-            if (cell) {
-                const cellRect = cell.getBoundingClientRect();
-                group.push({
-                    el: cell, vIdx: idx, currentX: 0, currentY: 0, targetX: 0, targetY: 0, isLeader: false,
-                    gridOffsetX: (cellRect.left + cellRect.width / 2) - lCenterX,
-                    gridOffsetY: (cellRect.top + cellRect.height / 2) - lCenterY
-                });
-            } else {
-                const cW = centerCell.offsetWidth;
-                const cH = centerCell.offsetHeight;
-                const vLeader = virtualMatrix.at(leaderIndex);
-                group.push({
-                    el: null, vIdx: idx, currentX: 0, currentY: 0, targetX: 0, targetY: 0, isLeader: false,
-                    gridOffsetX: (vItem.col - vLeader.col) * cW,
-                    gridOffsetY: (vItem.row - vLeader.row) * cH
-                });
-            }
+            const cell = document.getElementById("cell-id-" + idx);
+            const offsetX = (vItem.col - vLeader.col) * cellWidth;
+            const offsetY = (vItem.row - vLeader.row) * cellHeight;
+
+            group.push({
+                el: cell,
+                vIdx: idx, currentX: 0, currentY: 0, targetX: 0, targetY: 0, isLeader: false,
+                gridOffsetX: offsetX, gridOffsetY: offsetY
+            });
         }
     });
     return group;
+}
+
+function onPointerDown(e) {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (!e.isPrimary || isDragging) return;
+
+    draggedElement = e.currentTarget;
+    if (draggedElement.style.visibility === "hidden") return;
+
+    isDragging = true;
+    draggedElement.setPointerCapture(e.pointerId);
+
+    startX = e.clientX; startY = e.clientY;
+    mouseX = e.clientX; mouseY = e.clientY;
+
+    const rawGroup = getAttachedGroup(draggedElement);
+    const currentFontSizeStr = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
+    document.documentElement.style.setProperty('--phantom-font-size', currentFontSizeStr);
+
+    const leaderRect = draggedElement.getBoundingClientRect();
+
+    dragGroup = rawGroup.map(item => {
+        if (item.el) item.el.style.opacity = "0.0";
+
+        const phantom = document.createElement('div');
+        phantom.classList.add('phantom-cell');
+        phantom.classList.add(item.isLeader ? 'leader' : 'follower');
+
+        const vItem = virtualMatrix.at(item.vIdx);
+        phantom.textContent = vItem ? vItem.value : "0";
+
+        let pLeft = leaderRect.left + item.gridOffsetX;
+        let pTop = leaderRect.top + item.gridOffsetY;
+
+        phantom.style.left = pLeft + "px";
+        phantom.style.top = pTop + "px";
+        phantom.style.width = leaderRect.width + "px";
+        phantom.style.height = leaderRect.height + "px";
+
+        document.body.appendChild(phantom);
+
+        return {
+            ...item,
+            phantomEl: phantom,
+            phantomStartX: pLeft,
+            phantomStartY: pTop
+        };
+    });
+
+    updateDragAnimation();
+    draggedElement.addEventListener('pointermove', onPointerMove);
+    draggedElement.addEventListener('pointerup', onPointerUp);
+    draggedElement.addEventListener('pointercancel', onPointerUp);
 }
 
 function onPointerMove(e) {
@@ -309,152 +346,69 @@ function onPointerMove(e) {
     });
 }
 
-function onPointerDown(e) {
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
-    // ФИКС: вместо activeTouches проверяем, является ли это касание основным
-    if (!e.isPrimary || isDragging) return;
-
-    draggedElement = e.currentTarget;
-    if (draggedElement.style.visibility === "hidden") return;
-
-    isDragging = true;
-    draggedElement.setPointerCapture(e.pointerId);
-
-    startX = e.clientX; startY = e.clientY;
-    mouseX = e.clientX; mouseY = e.clientY;
-
-    const rawGroup = getAttachedGroup(draggedElement);
-    const currentFontSize = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
-    document.documentElement.style.setProperty('--phantom-font-size', currentFontSize);
-
-    dragGroup = rawGroup.map(item => {
-        item.el.style.opacity = "0.0";
-
-        const phantom = document.createElement('div');
-        phantom.classList.add('phantom-cell');
-        phantom.classList.add(item.isLeader ? 'leader' : 'follower');
-        phantom.textContent = item.el.textContent;
-
-        const rect = item.el.getBoundingClientRect();
-        phantom.style.left = rect.left + "px";
-        phantom.style.top = rect.top + "px";
-        phantom.style.width = rect.width + "px";
-        phantom.style.height = rect.height + "px";
-
-        document.body.appendChild(phantom);
-
-        return {
-            ...item,
-            phantomEl: phantom,
-            phantomStartX: rect.left,
-            phantomStartY: rect.top
-        };
-    });
-
-    updateDragAnimation();
-    draggedElement.addEventListener('pointermove', onPointerMove);
-    draggedElement.addEventListener('pointerup', onPointerUp);
-    draggedElement.addEventListener('pointercancel', onPointerUp);
-}
-
-
 function updateDragAnimation() {
     if (!isDragging) return;
 
-    // 1. Получаем точные экранные границы рамки монитора
     const screenEl = document.querySelector('.screen');
     const screenRect = screenEl.getBoundingClientRect();
 
-    const leader = dragGroup.find(item => item.isLeader);
-
-    // 2. Рассчитываем чистую дельту движения мыши от точки старта
-    leader.targetX = mouseX - startX;
-    leader.targetY = mouseY - startY;
-    leader.currentX += (leader.targetX - leader.currentX) * 0.35;
-    leader.currentY += (leader.targetY - leader.currentY) * 0.35;
-
-    // 3. Извлекаем ЧИСТЫЙ РАЗМЕР ШРИФТА в пикселях для текущего уровня зума
     const currentFontSizeStr = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
     const baseFontSize = parseInt(currentFontSizeStr) || 14;
+
+    const visualLeaderWidth = baseFontSize * 1.4;
+    const visualLeaderHeight = baseFontSize * 1.4;
+    const radiusX = visualLeaderWidth / 2;
+    const radiusY = visualLeaderHeight / 2;
+
+    let clampedMouseX = mouseX;
+    let clampedMouseY = mouseY;
+
+    if (clampedMouseX < screenRect.left + radiusX) clampedMouseX = screenRect.left + radiusX;
+    if (clampedMouseX > screenRect.right - radiusX) clampedMouseX = screenRect.right - radiusX;
+    if (clampedMouseY < screenRect.top + radiusY) clampedMouseY = screenRect.top + radiusY;
+    if (clampedMouseY > screenRect.bottom) clampedMouseY = screenRect.bottom;
+
+    const leader = dragGroup.find(item => item.isLeader);
+
+    leader.targetX = clampedMouseX - startX;
+    leader.targetY = clampedMouseY - startY;
+    leader.currentX += (leader.targetX - leader.currentX) * 0.35;
+    leader.currentY += (leader.targetY - leader.currentY) * 0.35;
 
     dragGroup.forEach(item => {
         if (!item.phantomEl) return;
 
-        let idealTranslateX = 0;
-        let idealTranslateY = 0;
+        let finalCenterX = (item.phantomStartX + (baseFontSize / 2)) + leader.currentX;
+        let finalCenterY = (item.phantomStartY + (baseFontSize / 2)) + leader.currentY;
 
-        if (item.isLeader) {
-            idealTranslateX = leader.currentX;
-            idealTranslateY = leader.currentY;
-        } else {
+        if (!item.isLeader) {
             const compressionFactor = 0.6;
             item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
             item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
-
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
 
-            idealTranslateX = item.currentX;
-            idealTranslateY = item.currentY;
+            finalCenterX = (item.phantomStartX + (baseFontSize / 2)) + item.currentX;
+            finalCenterY = (item.phantomStartY + (baseFontSize / 2)) + item.currentY;
         }
 
-        // 4. МАТЕМАТИЧЕСКИЙ CLAMP ПО ВИДИМОМУ ТЕЛУ СИМВОЛА
-        // Рассчитываем, где окажется центр ЖЕСТКОЙ КЛЕЙКИ (начальный центр + translate)
-        const cellW = item.phantomEl.offsetWidth || 30;
-        const cellH = item.phantomEl.offsetHeight || 30;
-
-        const startCenterX = item.phantomStartX + (cellW / 2);
-        const startCenterY = item.phantomStartY + (cellH / 2);
-
-        let finalCenterX = startCenterX + idealTranslateX;
-        let finalCenterY = startCenterY + idealTranslateY;
-
-        // Вычисляем реальный видимый радиус цифры с учетом масштаба scale(1.4) для лидера
         const currentScale = item.isLeader ? 1.4 : 1.0;
         const visibleRadiusX = (baseFontSize * currentScale) / 2;
         const visibleRadiusY = (baseFontSize * currentScale) / 2;
 
-        // --- ОГРАНИЧЕНИЕ ЛЕВОГО КРАЯ (Вплотную) ---
-        if (finalCenterX - visibleRadiusX < screenRect.left) {
-            finalCenterX = screenRect.left + visibleRadiusX;
-        }
-        // --- ОГРАНИЧЕНИЕ ПРАВОГО КРАЯ (Вплотную) ---
-        if (finalCenterX + visibleRadiusX > screenRect.right) {
-            finalCenterX = screenRect.right - visibleRadiusX;
-        }
-        // --- ОГРАНИЧЕНИЕ ВЕРХНЕГО КРАЯ (Вплотную) ---
-        if (finalCenterY - visibleRadiusY < screenRect.top) {
-            finalCenterY = screenRect.top + visibleRadiusY;
-        }
-        // --- ОГРАНИЧЕНИЕ НИЖНЕГО КРАЯ (Твоя идеальная логика с заходом в коробки) ---
-        // Разрешаем центру опускаться до самого низа, чтобы цифры проваливались в коробки наполовину
-        if (finalCenterY > screenRect.bottom) {
-            finalCenterY = screenRect.bottom;
-        }
+        if (finalCenterX - visibleRadiusX < screenRect.left) finalCenterX = screenRect.left + visibleRadiusX;
+        if (finalCenterX + visibleRadiusX > screenRect.right) finalCenterX = screenRect.right - visibleRadiusX;
+        if (finalCenterY - visibleRadiusY < screenRect.top) finalCenterY = screenRect.top + visibleRadiusY;
+        if (finalCenterY > screenRect.bottom) finalCenterY = screenRect.bottom;
 
-        // 5. Переводим ограниченные координаты центра обратно в дельту translate для CSS
-        const finalX = finalCenterX - (cellW / 2);
-        const finalY = finalCenterY - (cellH / 2);
+        const finalTranslateX = (finalCenterX - visibleRadiusX) - item.phantomStartX;
+        const finalTranslateY = (finalCenterY - visibleRadiusY) - item.phantomStartY;
 
-        const finalTranslateX = finalX - item.phantomStartX;
-        const finalTranslateY = finalY - item.phantomStartY;
-
-        // 6. Отрисовываем фантомы
-        if (item.isLeader) {
-            item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px) scale(1.4)";
-        } else {
-            item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px)";
-        }
+        item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px) scale(" + currentScale + ")";
     });
 
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
-
-
-
-
-
-
 
 function onPointerUp(e) {
     if (!isDragging) return;
@@ -473,30 +427,23 @@ function onPointerUp(e) {
         const binIndex = parseInt(droppedInBin.dataset.bin) - 1;
 
         dragGroup.forEach(item => {
-            // Удаляем фантом из body
             if (item.phantomEl) item.phantomEl.remove();
-
-            // Навсегда прячем реальную цифру в виртуальной матрице
             const vItem = virtualMatrix.at(item.vIdx);
             if (vItem) vItem.visible = false;
-
-            // Сбрасываем прозрачность на будущее
-            item.el.style.opacity = "";
+            if (item.el) resetElementStyles(item.el);
         });
 
         updateBinProgress(binIndex, dragGroup.length);
         renderViewport();
     } else {
-        // Если промахнулись — возвращаем цифры на место с анимацией фантомов
         dragGroup.forEach(item => {
             if (item.phantomEl) {
                 item.phantomEl.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1)';
                 item.phantomEl.style.transform = 'translate(0px, 0px)';
             }
-
             setTimeout(() => {
                 if (item.phantomEl) item.phantomEl.remove();
-                item.el.style.opacity = ""; // Возвращаем видимость оригиналу в сетке
+                if (item.el) resetElementStyles(item.el);
             }, 300);
         });
     }
@@ -516,13 +463,14 @@ function cancelDrag() {
     cancelAnimationFrame(animationFrameId);
     dragGroup.forEach(item => {
         if (item.phantomEl) item.phantomEl.remove();
-        item.el.style.opacity = "";
+        if (item.el) resetElementStyles(item.el);
     });
     draggedElement = null;
     dragGroup = [];
 }
 
 function resetElementStyles(el) {
+    el.style.opacity = "";
     el.classList.remove('dragging', 'drag-group');
     el.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1)';
     el.style.transform = '';
@@ -544,12 +492,9 @@ function updateBinProgress(binIndex, count) {
     const totalPercent = Math.min(100, Math.floor((removedCount / TOTAL_NUMBERS) * 100));
     totalPercentEl.textContent = totalPercent + "%";
 
-    // Условие полной очистки экрана (победа)
     if (removedCount >= TOTAL_NUMBERS) {
-        // Принудительно включаем музыку Siena Project Complete, если она спала
         const bgMusic = document.getElementById('bg-music');
         const musicToggle = document.getElementById('music-toggle');
-
         if (bgMusic && bgMusic.paused) {
             bgMusic.play().then(() => {
                 if (musicToggle) {
@@ -557,16 +502,17 @@ function updateBinProgress(binIndex, count) {
                     musicToggle.style.color = '#011625';
                     musicToggle.style.boxShadow = '0 0 15px #4df3ff';
                 }
-            }).catch(err => console.log("Ошибка автоплея при победе:", err));
+            }).catch(err => console.log(err));
         }
-
-        // Показываем экран триумфа
         winScreen.classList.add('active');
     }
 }
 
-
 window.addEventListener('resize', handleResize);
+container.addEventListener('touchstart', onContainerTouchStart, { passive: true });
+container.addEventListener('touchmove', onContainerTouchMove, { passive: false });
+container.addEventListener('touchend', onContainerTouchEnd);
+container.addEventListener('touchcancel', onContainerTouchEnd);
 
 initMatrix();
 
