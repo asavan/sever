@@ -59,33 +59,38 @@ function initMatrix() {
     cameraRowOffset = 0;
 
     for (let i = 0; i < TOTAL_NUMBERS; i++) {
-        const r = Math.floor(i / BASE_COLS);
-        const c = i % BASE_COLS;
         virtualMatrix.push({
-            index: i, row: r, col: c,
+            index: i,
+            row: Math.floor(i / BASE_COLS),
+            col: i % BASE_COLS,
             value: Math.floor(Math.random() * 10),
             visible: true
         });
     }
 
-    virtualMatrix.forEach(item => {
-        const attachedIndices = [];
-        virtualMatrix.forEach(neighbor => {
-            if (neighbor.index === item.index) return;
-            if (Math.abs(neighbor.row - item.row) <= 1 && Math.abs(neighbor.col - item.col) <= 1) {
-                if (Math.random() < 0.45) {
-                    attachedIndices.push(neighbor.index);
-                }
+    for (let item of virtualMatrix) {
+        let attached = [];
+        for (let n of virtualMatrix) {
+            if (n.index !== item.index && Math.abs(n.row - item.row) <= 1 && Math.abs(n.col - item.col) <= 1) {
+                if (Math.random() < 0.45) attached.push(n.index);
             }
-        });
-        predefinedGroups[item.index] = attachedIndices;
-    });
+        }
+        predefinedGroups[item.index] = attached;
+    }
 
     renderViewport();
 
     container.removeEventListener('wheel', onContainerWheel);
     container.addEventListener('wheel', onContainerWheel, { passive: false });
+
+    container.removeEventListener('touchstart', onContainerTouchStart);
+    container.removeEventListener('touchmove', onContainerTouchMove);
+    container.addEventListener('touchstart', onContainerTouchStart, { passive: true });
+    container.addEventListener('touchmove', onContainerTouchMove, { passive: false });
+    container.addEventListener('touchend', onContainerTouchEnd);
+    container.addEventListener('touchcancel', onContainerTouchEnd);
 }
+
 
 function setupZoomLevels() {
     if (COLS === 14) {
@@ -519,10 +524,6 @@ function updateBinProgress(binIndex, count) {
 }
 
 window.addEventListener('resize', handleResize);
-container.addEventListener('touchstart', onContainerTouchStart, { passive: true });
-container.addEventListener('touchmove', onContainerTouchMove, { passive: false });
-container.addEventListener('touchend', onContainerTouchEnd);
-container.addEventListener('touchcancel', onContainerTouchEnd);
 
 initMatrix();
 
