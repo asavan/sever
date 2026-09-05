@@ -1,7 +1,8 @@
-const COLS = 28;
+let COLS = 28;
 const ROWS = 12;
-const TOTAL_NUMBERS = COLS * ROWS;
+let TOTAL_NUMBERS = COLS * ROWS;
 
+const monitor = document.getElementById('monitor-container');
 const container = document.getElementById('matrix-container');
 const grid = document.getElementById('matrix-grid');
 const totalPercentEl = document.getElementById('total-percent');
@@ -10,21 +11,12 @@ const winScreen = document.getElementById('win-screen');
 let removedCount = 0;
 let binProgress = Array(5).fill(0);
 let predefinedGroups = {};
-
-// Эталонная виртуальная база данных
 let virtualMatrix = [];
-// Массив ссылок на созданные DOM-элементы цифр
-let domCells = Array(TOTAL_NUMBERS).fill(null);
+let domCells = [];
 
-// Конфигурация 3 уровней «Камеры»
-const ZOOM_LEVELS = [
-    { viewCols: 28, viewRows: 12, fontSize: "14px" }, // Уровень 0 (Минимум)
-    { viewCols: 18, viewRows: 8,  fontSize: "24px" }, // Уровень 1 (Средний)
-    { viewCols: 10, viewRows: 5,  fontSize: "38px" }  // Уровень 2 (Максимум)
-];
+// Динамические уровни камеры для разных ориентаций
+let ZOOM_LEVELS = [];
 let currentZoomIndex = 0;
-
-// Текущее смещение виртуальной камеры (базовый левый верхний угол отрисовки)
 let cameraColOffset = 0;
 let cameraRowOffset = 0;
 
@@ -43,6 +35,28 @@ let initialPinchDistance = 0;
 let initialZoomOnPinchStart = 0;
 
 function initMatrix() {
+    // Детектим ориентацию экрана
+    const isPortrait = window.innerHeight > window.innerWidth;
+
+    if (isPortrait) {
+        COLS = 14; // Половинная ширина для портрета
+        monitor.classList.add('is-portrait');
+        ZOOM_LEVELS = [
+            { viewCols: 14, viewRows: 12, fontSize: "14px" },
+            { viewCols: 9,  viewRows: 8,  fontSize: "24px" },
+            { viewCols: 5,  viewRows: 5,  fontSize: "38px" }
+        ];
+    } else {
+        COLS = 28; // Стандарт для ландшафта
+        monitor.classList.remove('is-portrait');
+        ZOOM_LEVELS = [
+            { viewCols: 28, viewRows: 12, fontSize: "14px" },
+            { viewCols: 18, viewRows: 8,  fontSize: "24px" },
+            { viewCols: 10, viewRows: 5,  fontSize: "38px" }
+        ];
+    }
+
+    TOTAL_NUMBERS = COLS * ROWS;
     grid.innerHTML = '';
     virtualMatrix = [];
     domCells = Array(TOTAL_NUMBERS).fill(null);
@@ -53,20 +67,18 @@ function initMatrix() {
     cameraColOffset = 0;
     cameraRowOffset = 0;
 
-    // 1. Генерируем скрытую виртуальную базу данных
+    // Генерируем адаптивную виртуальную матрицу
     for (let i = 0; i < TOTAL_NUMBERS; i++) {
         const r = Math.floor(i / COLS);
         const c = i % COLS;
         virtualMatrix.push({
-            index: i,
-            row: r,
-            col: c,
+            index: i, row: r, col: c,
             value: Math.floor(Math.random() * 10),
             visible: true
         });
     }
 
-    // 2. Генерируем постоянные связи
+    // Рассчитываем постоянные связи
     virtualMatrix.forEach(item => {
         const attachedIndices = [];
         virtualMatrix.forEach(neighbor => {
@@ -80,26 +92,21 @@ function initMatrix() {
         predefinedGroups[item.index] = attachedIndices;
     });
 
-    // Отрендерить камеру
     renderViewport();
 
+    // Защита от дублирования слушателей при ресайзе
+    container.removeEventListener('wheel', onContainerWheel);
     container.addEventListener('wheel', onContainerWheel, { passive: false });
-    container.addEventListener('pointerdown', onContainerPointerDown);
-    container.addEventListener('pointermove', onContainerPointerMove);
-    container.addEventListener('pointerup', onContainerPointerUp);
-    container.addEventListener('pointercancel', onContainerPointerUp);
 }
 
 function renderViewport() {
     grid.innerHTML = '';
     const cfg = ZOOM_LEVELS.at(currentZoomIndex);
 
-    // Передаем в CSS размеры окна видимости
     grid.style.setProperty('--view-cols', cfg.viewCols);
     grid.style.setProperty('--view-rows', cfg.viewRows);
     grid.style.setProperty('--cell-font-size', cfg.fontSize);
 
-    // Отрисовываем только те цифры, которые попадают в окно камеры
     for (let r = 0; r < cfg.viewRows; r++) {
         for (let c = 0; c < cfg.viewCols; c++) {
             const targetRow = cameraRowOffset + r;
@@ -121,11 +128,9 @@ function renderViewport() {
                     domCells.splice(vIdx, 1, cell);
                     cell.addEventListener('pointerdown', onPointerDown);
                 } else {
-                    // Место под убранную цифру
                     grid.appendChild(document.createElement('div'));
                 }
             } else {
-                // Пустая зона за краем эталонной матрицы
                 grid.appendChild(document.createElement('div'));
             }
         }
@@ -136,15 +141,12 @@ function updateCameraFocus(focusRow, focusCol, oldZoomIdx, newZoomIdx) {
     const oldCfg = ZOOM_LEVELS.at(oldZoomIdx);
     const newCfg = ZOOM_LEVELS.at(newZoomIdx);
 
-    // Рассчитываем, где фокусная цифра находилась внутри старого окна просмотра (в процентах)
     const relX = (focusCol - cameraColOffset) / oldCfg.viewCols;
     const relY = (focusRow - cameraRowOffset) / oldCfg.viewRows;
 
-    // Сдвигаем левый верхний угол новой камеры так, чтобы пропорции фокуса сохранились
     let newColOffset = Math.round(focusCol - (relX * newCfg.viewCols));
     let newRowOffset = Math.round(focusRow - (relY * newCfg.viewRows));
 
-    // Удерживаем камеру в рамках эталонного поля 28x12
     cameraColOffset = Math.max(0, Math.min(COLS - newCfg.viewCols, newColOffset));
     cameraRowOffset = Math.max(0, Math.min(ROWS - newCfg.viewRows, newRowOffset));
 
@@ -155,7 +157,6 @@ function onContainerWheel(e) {
     e.preventDefault();
     if (isDragging) return;
 
-    // Ищем, над какой цифрой сейчас находится курсор
     const targetCell = e.target.closest('.num-cell');
     let focusRow = cameraRowOffset + Math.floor(ZOOM_LEVELS.at(currentZoomIndex).viewRows / 2);
     let focusCol = cameraColOffset + Math.floor(ZOOM_LEVELS.at(currentZoomIndex).viewCols / 2);
@@ -242,7 +243,6 @@ function getAttachedGroup(centerCell) {
         if (vItem && vItem.visible) {
             const cell = domCells.at(idx);
             if (cell) {
-                // Если сосед виден в окне камеры, замеряем его точную дельту
                 const cellRect = cell.getBoundingClientRect();
                 group.push({
                     el: cell, vIdx: idx, currentX: 0, currentY: 0, targetX: 0, targetY: 0, isLeader: false,
@@ -250,7 +250,6 @@ function getAttachedGroup(centerCell) {
                     gridOffsetY: (cellRect.top + cellRect.height / 2) - lCenterY
                 });
             } else {
-                // Если сосед за кадром, симулируем его отступ на основе размеров лидера
                 const cW = centerCell.offsetWidth;
                 const cH = centerCell.offsetHeight;
                 const vLeader = virtualMatrix.at(leaderIndex);
@@ -291,7 +290,6 @@ function onPointerMove(e) {
     if (!isDragging) return;
     mouseX = e.clientX; mouseY = e.clientY;
 
-    // Проверка коробок
     const bins = document.querySelectorAll('.bin');
     bins.forEach(bin => {
         const r = bin.getBoundingClientRect();
@@ -313,16 +311,12 @@ function updateDragAnimation() {
     leader.currentY += (leader.targetY - leader.currentY) * 0.35;
 
     dragGroup.forEach(item => {
-        if (!item.el) return; // Игнорируем соседей, которые за кадром
+        if (!item.el) return;
         if (item.isLeader) {
             item.el.style.transform = "translate(" + item.currentX + "px, " + item.currentY + "px)";
         } else {
-            // КОЭФФИЦИЕНТ СТЯГИВАНИЯ:
-            // 1.0 — цифры летят строго параллельно на своих местах из сетки
-            // 0.6 — плавно притягиваются чуть ближе к лидеру в процессе движения
+            // ФИКС РАЗЛЕТА: Применяем математически верное смещение
             const compressionFactor = 0.6;
-
-            // Исправленная математическая формула для сохранения структуры:
             item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
             item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
 
@@ -350,14 +344,12 @@ function onPointerUp(e) {
     if (droppedInBin) {
         const binIndex = parseInt(droppedInBin.dataset.bin) - 1;
 
-        // Помечаем всю группу как удаленную в виртуальной матрице
         dragGroup.forEach(item => {
             const vItem = virtualMatrix.at(item.vIdx);
             if (vItem) vItem.visible = false;
             if (item.el) resetElementStyles(item.el);
         });
 
-        // Перерисовываем камеру (удаленные цифры исчезнут честно)
         updateBinProgress(binIndex, dragGroup.length);
         renderViewport();
     } else {
@@ -410,5 +402,13 @@ function updateBinProgress(binIndex, count) {
         winScreen.classList.add('active');
     }
 }
+
+// Слушаем поворот экрана и перезапускаем матрицу
+window.addEventListener('resize', initMatrix);
+
+container.addEventListener('pointerdown', onContainerPointerDown);
+container.addEventListener('pointermove', onContainerPointerMove);
+container.addEventListener('pointerup', onContainerPointerUp);
+container.addEventListener('pointercancel', onContainerPointerUp);
 
 initMatrix();

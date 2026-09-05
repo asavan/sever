@@ -1,4 +1,3 @@
-/* Общие настройки ретро-стиля */
 @import url('https://googleapis.com');
 
 * {
@@ -18,24 +17,32 @@ body {
     overflow: hidden;
 }
 
-/* Эмуляция старого пузатого монитора */
 .crt-monitor {
     position: relative;
-    width: 90vw;
+    width: 95vw;
     max-width: 960px;
-    height: 560px;
+    height: 90vh;
+    max-height: 560px;
     background: #17223b;
-    border-radius: 40px;
-    padding: 25px;
+    border-radius: 30px;
+    padding: 15px;
     box-shadow: inset 0 0 20px rgba(0,0,0,0.8), 0 20px 50px rgba(0,0,0,0.6);
+}
+
+/* Мобильная адаптация монитора при вертикальном экране */
+.crt-monitor.is-portrait {
+    height: 95vh;
+    max-height: 800px;
+    border-radius: 20px;
+    padding: 10px;
 }
 
 .screen-bezel {
     background: #09101f;
     width: 100%;
     height: 100%;
-    border-radius: 30px;
-    padding: 10px;
+    border-radius: 20px;
+    padding: 8px;
     box-shadow: inset 0 0 30px rgba(0,0,0,1);
     overflow: hidden;
 }
@@ -45,50 +52,47 @@ body {
     width: 100%;
     height: 100%;
     background-color: #011625;
-    border-radius: 20px;
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     border: 2px solid #04354f;
 }
 
-/* Стилизация ЭЛТ-фильтра */
 .crt-effects {
     position: absolute;
     top: 0; left: 0; width: 100%; height: 100%;
-    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 255, 0, 0.06));
     background-size: 100% 4px, 6px 100%;
     z-index: 10;
     pointer-events: none;
     opacity: 0.4;
 }
 
-/* Верхний тулбар */
 .top-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 25px;
+    padding: 10px 15px;
     border-bottom: 2px solid #00567a;
     color: #4df3ff;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: bold;
     text-shadow: 0 0 5px #4df3ff;
 }
 
 .logo {
     border: 2px solid #4df3ff;
-    padding: 2px 8px;
+    padding: 2px 6px;
     border-radius: 50%;
-    font-size: 14px;
-    letter-spacing: 2px;
+    font-size: 12px;
+    letter-spacing: 1px;
 }
 
-/* Основное поле с матрицей чисел */
 .matrix-container {
     flex: 1;
     position: relative;
-    padding: 15px;
+    padding: 10px;
     overflow: hidden;
     cursor: default;
     touch-action: none;
@@ -96,7 +100,6 @@ body {
 
 .matrix-grid {
     display: grid;
-    /* Размеры колонок и строк теперь динамические из JS */
     grid-template-columns: repeat(var(--view-cols, 28), 1fr);
     grid-template-rows: repeat(var(--view-rows, 12), 1fr);
     width: 100%;
@@ -105,13 +108,12 @@ body {
     will-change: transform;
 }
 
-/* Числа-элементы */
 .num-cell {
     display: flex;
     justify-content: center;
     align-items: center;
     color: #31a2cc;
-    font-size: var(--cell-font-size, 14px); /* Четкий шрифт без размытия */
+    font-size: var(--cell-font-size, 14px);
     font-weight: bold;
     transition: color 0.2s ease;
     cursor: grab;
@@ -119,7 +121,6 @@ body {
     z-index: 2;
 }
 
-/* Интерактивное увеличение при наведении */
 .num-cell:not(.dragging):not(.drag-group):hover {
     transform: scale(1.5);
     color: #4df3ff;
@@ -127,7 +128,6 @@ body {
     z-index: 5;
 }
 
-/* Состояния перетаскивания */
 .num-cell.dragging {
     transition: none !important;
     color: #ffffff !important;
@@ -143,10 +143,9 @@ body {
     z-index: 90;
 }
 
-/* Нижняя панель */
 .bottom-bar {
     border-top: 2px solid #00567a;
-    padding: 10px 20px;
+    padding: 10px 15px;
     background-color: #011c2e;
     color: #31a2cc;
     position: relative;
@@ -156,17 +155,26 @@ body {
 .bins-container {
     display: flex;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
     margin-bottom: 5px;
+}
+
+/* Коробки в портретном режиме становятся более компактными */
+.is-portrait .bins-container {
+    gap: 4px;
 }
 
 .bin {
     flex: 1;
     border: 2px solid #00567a;
-    padding: 5px;
+    padding: 4px;
     text-align: center;
     background: #01121f;
     transition: background-color 0.2s;
+}
+
+.is-portrait .bin {
+    padding: 2px;
 }
 
 .bin.drag-over {
@@ -175,18 +183,18 @@ body {
 }
 
 .bin-title {
-    font-size: 12px;
-    margin-bottom: 3px;
+    font-size: 11px;
+    margin-bottom: 2px;
     color: #4df3ff;
 }
 
 .bin-progress-bar {
     width: 100%;
-    height: 8px;
+    height: 6px;
     background: #05263a;
     border: 1px solid #00567a;
     overflow: hidden;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
 }
 
 .bin-progress-bar .fill {
@@ -198,18 +206,17 @@ body {
 }
 
 .bin-percent {
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .system-codes {
     text-align: center;
-    font-size: 11px;
+    font-size: 10px;
     letter-spacing: 1px;
-    margin-top: 5px;
+    margin-top: 3px;
     opacity: 0.7;
 }
 
-/* Экран победы */
 .win-screen {
     position: absolute;
     top: 0; left: 0; width: 100%; height: 100%;
@@ -230,18 +237,19 @@ body {
 }
 
 .win-screen h1 {
-    font-size: 32px;
-    margin-bottom: 20px;
+    font-size: 26px;
+    margin-bottom: 15px;
+    text-align: center;
 }
 
 .win-screen button {
-    margin-top: 25px;
+    margin-top: 20px;
     padding: 10px 20px;
     background: transparent;
     border: 2px solid #4df3ff;
     color: #4df3ff;
     font-family: inherit;
-    font-size: 16px;
+    font-size: 14px;
     cursor: pointer;
     box-shadow: 0 0 10px rgba(77,243,255,0.3);
     transition: all 0.2s;
