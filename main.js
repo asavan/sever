@@ -365,36 +365,18 @@ function updateDragAnimation() {
     const screenEl = document.querySelector('.screen');
     const screenRect = screenEl.getBoundingClientRect();
 
-    // 2. РАССЧИТЫВАЕМ РЕАЛЬНЫЙ РАДИУС ЦИФРЫ НА ТЕКУЩЕМ ЗУМЕ
-    // Извлекаем числовое значение шрифта (например, из "24px" получаем 24)
-    const currentFontSizeStr = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
-    const baseFontSize = parseInt(currentFontSizeStr) || 14;
-
-    // С учетом scale(1.4) для лидера, его реальный визуальный размер на экране:
-    const visualLeaderWidth = baseFontSize * 1.4;
-    const visualLeaderHeight = baseFontSize * 1.4;
-
-    // "Радиус" лидера — расстояние от его центра (курсора) до его краев
-    const radiusX = visualLeaderWidth / 2;
-    const radiusY = visualLeaderHeight / 2;
-
-    // 3. БЛОКИРУЕМ ТОЧКУ КУРСОРA (ЦЕНТР ЦИФРЫ) С УЧЕТОМ РАДИУСА ЛИДЕРА
+    // 2. БЛОКИРУЕМ ТОЧКУ КУРСОРA (Даем мыши полную свободу движения)
     let clampedMouseX = mouseX;
     let clampedMouseY = mouseY;
 
-    // Лево / Право: Курсор не может подойти к стене ближе, чем на свой радиус
-    if (clampedMouseX < screenRect.left + radiusX) clampedMouseX = screenRect.left + radiusX;
-    if (clampedMouseX > screenRect.right - radiusX) clampedMouseX = screenRect.right - radiusX;
-
-    // Верх: Макушка лидера намертво упрется в бирюзовую линию тулбара
-    if (clampedMouseY < screenRect.top + radiusY) clampedMouseY = screenRect.top + radiusY;
-
-    // Низ: Позволяем курсору опускаться до самого края экрана, чтобы цифра заходила глубоко в коробки
+    if (clampedMouseX < screenRect.left) clampedMouseX = screenRect.left;
+    if (clampedMouseX > screenRect.right) clampedMouseX = screenRect.right;
+    if (clampedMouseY < screenRect.top) clampedMouseY = screenRect.top;
     if (clampedMouseY > screenRect.bottom) clampedMouseY = screenRect.bottom;
 
     const leader = dragGroup.find(item => item.isLeader);
 
-    // 4. Вычисляем сдвиг лидера на основе ОГРАНИЧЕННОГО курсора
+    // 3. Вычисляем дельту сдвига лидера на основе курсора
     leader.targetX = clampedMouseX - startX;
     leader.targetY = clampedMouseY - startY;
 
@@ -404,39 +386,64 @@ function updateDragAnimation() {
     dragGroup.forEach(item => {
         if (!item.phantomEl) return;
 
-        let finalTranslateX = 0;
-        let finalTranslateY = 0;
+        let idealTranslateX = 0;
+        let idealTranslateY = 0;
 
         if (item.isLeader) {
-            finalTranslateX = leader.currentX;
-            finalTranslateY = leader.currentY;
+            idealTranslateX = leader.currentX;
+            idealTranslateY = leader.currentY;
         } else {
             const compressionFactor = 0.6;
-            // Физика притяжения соседей в кучку
             item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
             item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
 
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
 
-            finalTranslateX = item.currentX;
-            finalTranslateY = item.currentY;
-
-            // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА ДЛЯ СОСЕДЕЙ:
-            // Если сосед по инерции пытается вылететь за Лево или Верх монитора — поджимаем его
-            const neighborRect = item.phantomEl.getBoundingClientRect();
-            const nFinalX = item.phantomStartX + finalTranslateX;
-            const nFinalY = item.phantomStartY + finalTranslateY;
-
-            if (nFinalX < screenRect.left) {
-                finalTranslateX = screenRect.left - item.phantomStartX;
-            }
-            if (nFinalY < screenRect.top) {
-                finalTranslateY = screenRect.top - item.phantomStartY;
-            }
+            idealTranslateX = item.currentX;
+            idealTranslateY = item.currentY;
         }
 
-        // 5. Отрисовываем фантомы через чистый, выверенный сдвиг
+        // 4. СБРОС МАСШТАБА ДЛЯ ТОЧНОГО ЗАМЕРА (ФИКС АСИММЕТРИИ)
+        // Временно убираем scale, чтобы замерить ЧИСТЫЕ границы элемента на экране
+        item.phantomEl.style.transform = "translate(" + idealTranslateX + "px, " + idealTranslateY + "px)";
+
+        // Замеряем, где элемент РЕАЛЬНО находится на экране в этот миллисекунду
+        const pRect = item.phantomEl.getBoundingClientRect();
+
+        let finalX = pRect.left;
+        let finalY = pRect.top;
+
+        // Рассчитываем визуальную поправку на scale(1.4) для лидера
+        // Так как scale увеличивает элемент из центра, его края расширятся во все стороны на 20%
+        const scaleBonusX = item.isLeader ? (pRect.width * 0.2) : 0;
+        const scaleBonusY = item.isLeader ? (pRect.height * 0.2) : 0;
+
+        // --- ЖЕСТКИЙ CLAMP ПО ВСЕМ 4 СТОРОНАМ ---
+
+        // Левый край
+        if (finalX - scaleBonusX < screenRect.left) {
+            finalX = screenRect.left + scaleBonusX;
+        }
+        // Правый край
+        if (finalX + pRect.width + scaleBonusX > screenRect.right) {
+            finalX = screenRect.right - pRect.width - scaleBonusX;
+        }
+        // Верхний край
+        if (finalY - scaleBonusY < screenRect.top) {
+            finalY = screenRect.top + scaleBonusY;
+        }
+        // Нижний край (разрешаем зайти в коробку ровно на половину высоты цифры)
+        const allowedBottomOut = pRect.height / 2;
+        if (finalY + pRect.height + scaleBonusY - allowedBottomOut > screenRect.bottom) {
+            finalY = screenRect.bottom - pRect.height + allowedBottomOut - scaleBonusY;
+        }
+
+        // 5. Переводим заблокированные экранные пиксели обратно в дельту translate для CSS
+        const finalTranslateX = finalX - item.phantomStartX;
+        const finalTranslateY = finalY - item.phantomStartY;
+
+        // 6. Отрисовываем фантомы с применением финального масштаба
         if (item.isLeader) {
             item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px) scale(1.4)";
         } else {
@@ -446,6 +453,7 @@ function updateDragAnimation() {
 
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
+
 
 
 
