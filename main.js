@@ -29,7 +29,7 @@ let startY = 0;
 let mouseX = 0;
 let mouseY = 0;
 
-let activeTouches = [];
+// Переменные для мобильного зума (Touch)
 let initialPinchDistance = 0;
 let initialZoomOnPinchStart = 0;
 
@@ -82,8 +82,15 @@ function initMatrix() {
 
     renderViewport();
 
+    // 1. Десктопный зум колесиком мыши
     container.removeEventListener('wheel', onContainerWheel);
     container.addEventListener('wheel', onContainerWheel, { passive: false });
+
+    // 2. Мобильный зум жестами Pinch (touchstart / touchmove)
+    container.addEventListener('touchstart', onContainerTouchStart, { passive: true });
+    container.addEventListener('touchmove', onContainerTouchMove, { passive: false });
+    container.addEventListener('touchend', onContainerTouchEnd);
+    container.addEventListener('touchcancel', onContainerTouchEnd);
 }
 
 function setupZoomLevels() {
@@ -194,65 +201,57 @@ function onContainerWheel(e) {
     }
 }
 
-function onContainerPointerDown(e) {
-    const index = activeTouches.findIndex(t => t.pointerId === e.pointerId);
-    if (index > -1) {
-        activeTouches.splice(index, 1, e);
-    } else {
-        activeTouches.push(e);
-    }
+// НАДЁЖНАЯ ТАЧ-ЛОГИКА ЗУМА: Срабатывает СТРОГО на смартфонах
+function onContainerTouchStart(e) {
+    if (e.touches.length === 2) {
+        if (isDragging) cancelDrag(); // сбрасываем фантомы, чтобы не зависали
 
-    // Если на экране появилось 2 пальца (мультитач жестом Pinch)
-    if (activeTouches.length === 2) {
-        // ФИКС: Если в этот момент тащили цифру — сбрасываем фантомы, чтобы не зависали
-        if (isDragging) cancelDrag();
-
-        const firstTouch = activeTouches.at(0);
-        const secondTouch = activeTouches.at(1);
-
-        initialPinchDistance = getDistance(firstTouch, secondTouch);
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        initialPinchDistance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         initialZoomOnPinchStart = currentZoomIndex;
-
-        const rect = container.getBoundingClientRect();
-        const midX = (firstTouch.clientX + secondTouch.clientX) / 2 - rect.left;
-        const midY = (firstTouch.clientY + secondTouch.clientY) / 2 - rect.top;
-
-        grid.style.transformOrigin = ((midX / rect.width) * 100) + "% " + ((midY / rect.height) * 100) + "%";
     }
 }
 
+function onContainerTouchMove(e) {
+    if (e.touches.length === 2 && initialPinchDistance > 0) {
+        e.preventDefault(); // Запрещаем встроенный зум страницы браузером телефона
 
-function onContainerPointerMove(e) {
-    const index = activeTouches.findIndex(t => t.pointerId === e.pointerId);
-    if (index > -1) activeTouches.splice(index, 1, e);
-
-    if (activeTouches.length === 2 && initialPinchDistance > 0) {
-        const first = activeTouches.at(0);
-        const second = activeTouches.at(1);
-        const currentDistance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const currentDistance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
 
         const ratio = currentDistance / initialPinchDistance;
         let targetIndex = initialZoomOnPinchStart;
 
-        if (ratio > 1.4) targetIndex = Math.min(ZOOM_LEVELS.length - 1, initialZoomOnPinchStart + 1);
-        if (ratio > 2.0) targetIndex = ZOOM_LEVELS.length - 1;
-        if (ratio < 0.7) targetIndex = Math.max(0, initialZoomOnPinchStart - 1);
+        if (ratio > 1.35) targetIndex = Math.min(ZOOM_LEVELS.length - 1, initialZoomOnPinchStart + 1);
+        if (ratio > 1.9)  targetIndex = ZOOM_LEVELS.length - 1;
+        if (ratio < 0.75) targetIndex = Math.max(0, initialZoomOnPinchStart - 1);
 
         if (targetIndex !== currentZoomIndex) {
             const oldIdx = currentZoomIndex;
             currentZoomIndex = targetIndex;
 
-            let focusRow = cameraRowOffset + Math.floor(ROWS / 2);
-            let focusCol = cameraColOffset + Math.floor(COLS / 2);
+            // Центрируем камеру ровно между пальцами
+            const rect = container.getBoundingClientRect();
+            const midX = (t1.clientX + t2.clientX) / 2 - rect.left;
+            const midY = (t1.clientY + t2.clientY) / 2 - rect.top;
+
+            const currentCfg = ZOOM_LEVELS.at(oldIdx);
+            let focusCol = cameraColOffset + Math.floor((midX / rect.width) * currentCfg.viewCols);
+            let focusRow = cameraRowOffset + Math.floor((midY / rect.height) * currentCfg.viewRows);
+
             updateCameraFocus(focusRow, focusCol, oldIdx, currentZoomIndex);
         }
     }
 }
 
-function onContainerPointerUp(e) {
-    activeTouches = activeTouches.filter(t => t.pointerId !== e.pointerId);
-    if (activeTouches.length < 2) initialPinchDistance = 0;
+function onContainerTouchEnd(e) {
+    if (e.touches.length < 2) {
+        initialPinchDistance = 0;
+    }
 }
+
 
 function getAttachedGroup(centerCell) {
     const group = [];
@@ -312,7 +311,8 @@ function onPointerMove(e) {
 
 function onPointerDown(e) {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
-    if (activeTouches.length >= 2 || isDragging) return;
+    // ФИКС: вместо activeTouches проверяем, является ли это касание основным
+    if (!e.isPrimary || isDragging) return;
 
     draggedElement = e.currentTarget;
     if (draggedElement.style.visibility === "hidden") return;
@@ -323,24 +323,18 @@ function onPointerDown(e) {
     startX = e.clientX; startY = e.clientY;
     mouseX = e.clientX; mouseY = e.clientY;
 
-    // Получаем группу реальных элементов
     const rawGroup = getAttachedGroup(draggedElement);
-
-    // Получаем текущий размер шрифта из настроек камеры, чтобы передать его фантомам
     const currentFontSize = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
     document.documentElement.style.setProperty('--phantom-font-size', currentFontSize);
 
     dragGroup = rawGroup.map(item => {
-        // Делаем реальную цифру в сетке временно невидимой
         item.el.style.opacity = "0.0";
 
-        // Создаем её виртуального фантома в корне документа (body)
         const phantom = document.createElement('div');
         phantom.classList.add('phantom-cell');
         phantom.classList.add(item.isLeader ? 'leader' : 'follower');
         phantom.textContent = item.el.textContent;
 
-        // Замеряем стартовую позицию реальной цифры на экране, чтобы фантом появился ровно над ней
         const rect = item.el.getBoundingClientRect();
         phantom.style.left = rect.left + "px";
         phantom.style.top = rect.top + "px";
@@ -351,7 +345,7 @@ function onPointerDown(e) {
 
         return {
             ...item,
-            phantomEl: phantom, // сохраняем ссылку на фантом
+            phantomEl: phantom,
             phantomStartX: rect.left,
             phantomStartY: rect.top
         };
@@ -362,6 +356,7 @@ function onPointerDown(e) {
     draggedElement.addEventListener('pointerup', onPointerUp);
     draggedElement.addEventListener('pointercancel', onPointerUp);
 }
+
 
 function updateDragAnimation() {
     if (!isDragging) return;
@@ -540,11 +535,6 @@ function updateBinProgress(binIndex, count) {
 
 
 window.addEventListener('resize', handleResize);
-
-container.addEventListener('pointerdown', onContainerPointerDown);
-container.addEventListener('pointermove', onContainerPointerMove);
-container.addEventListener('pointerup', onContainerPointerUp);
-container.addEventListener('pointercancel', onContainerPointerUp);
 
 initMatrix();
 
