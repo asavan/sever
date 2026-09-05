@@ -363,65 +363,70 @@ function updateDragAnimation() {
 
     const leader = dragGroup.find(item => item.isLeader);
 
-    // 1. Вычисляем желаемый сдвиг лидера относительно точки старта
+    // 1. Рассчитываем чистую дельту движения мыши от точки старта
     leader.targetX = mouseX - startX;
     leader.targetY = mouseY - startY;
     leader.currentX += (leader.targetX - leader.currentX) * 0.35;
     leader.currentY += (leader.targetY - leader.currentY) * 0.35;
 
-    // 2. Получаем точные границы элемента .screen, за которые нельзя вылетать
+    // 2. Получаем точные экранные границы рамки монитора
     const screenEl = document.querySelector('.screen');
     const screenRect = screenEl.getBoundingClientRect();
 
     dragGroup.forEach(item => {
         if (!item.phantomEl) return;
 
-        let finalX = 0;
-        let finalY = 0;
+        let idealX = 0;
+        let idealY = 0;
 
+        // Вычисляем, где фантом ДОЛЖЕН оказаться на экране в пикселях
         if (item.isLeader) {
-            // Идеальные экранные координаты лидера с учетом сдвига
-            finalX = item.phantomStartX + leader.currentX;
-            finalY = item.phantomStartY + leader.currentY;
+            idealX = item.phantomStartX + leader.currentX;
+            idealY = item.phantomStartY + leader.currentY;
         } else {
             const compressionFactor = 0.6;
-            // Идеальные экранные координаты ведомого соседа
             item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
             item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
 
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
 
-            finalX = item.phantomStartX + item.currentX;
-            finalY = item.phantomStartY + item.currentY;
+            idealX = item.phantomStartX + item.currentX;
+            idealY = item.phantomStartY + item.currentY;
         }
 
-        // 3. ЖЕСТКИЙ ОГРАНИЧИТЕЛЬ (CLAMP) ПО ГРАНИЦАМ SCREEN
-        // Ограничиваем координаты фантома, чтобы его края не выходили за рамки монитора
+        // 3. ЖЕСТКИЙ ОГРАНИЧИТЕЛЬ КРАЕВ ЭЛТ-МОНИТОРА (CLAMP)
+        // Замеряем физические размеры фантома на экране (с учетом масштаба scale(1.4))
         const pRect = item.phantomEl.getBoundingClientRect();
 
-        // Ограничение по горизонтали (X)
-        if (finalX < screenRect.left) finalX = screenRect.left;
-        if (finalX + pRect.width > screenRect.right) finalX = screenRect.right - pRect.width;
+        // Не даем левому и верхнему краю уйти меньше левой/верхней рамки
+        if (idealX < screenRect.left) idealX = screenRect.left;
+        if (idealY < screenRect.top) idealY = screenRect.top;
 
-        // Ограничение по вертикали (Y)
-        if (finalY < screenRect.top) finalY = screenRect.top;
-        if (finalY + pRect.height > screenRect.bottom) finalY = screenRect.bottom - pRect.height;
+        // Не даем правому и нижнему краю вылезти дальше правой/нижней рамки
+        if (idealX + pRect.width > screenRect.right) {
+            idealX = screenRect.right - pRect.width;
+        }
+        if (idealY + pRect.height > screenRect.bottom) {
+            idealY = screenRect.bottom - pRect.height;
+        }
 
-        // 4. Переводим абсолютные ограниченные координаты обратно в transform translate
-        const clampedTranslateX = finalX - item.phantomStartX;
-        const clampedTranslateY = finalY - item.phantomStartY;
+        // 4. Переводим ограниченные экранные пиксели обратно в дельту translate для CSS
+        const finalTranslateX = idealX - item.phantomStartX;
+        const finalTranslateY = idealY - item.phantomStartY;
 
-        // Отрисовываем фантом
+        // Отрисовываем фантомы
         if (item.isLeader) {
-            item.phantomEl.style.transform = "translate(" + clampedTranslateX + "px, " + clampedTranslateY + "px) scale(1.4)";
+            item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px) scale(1.4)";
         } else {
-            item.phantomEl.style.transform = "translate(" + clampedTranslateX + "px, " + clampedTranslateY + "px)";
+            item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px)";
         }
     });
 
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
+
+
 
 
 function onPointerUp(e) {
