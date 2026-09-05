@@ -365,23 +365,17 @@ function updateDragAnimation() {
     const screenEl = document.querySelector('.screen');
     const screenRect = screenEl.getBoundingClientRect();
 
-    // 2. БЛОКИРУЕМ ТОЧКУ КУРСОРA (Даем мыши полную свободу движения)
-    let clampedMouseX = mouseX;
-    let clampedMouseY = mouseY;
-
-    if (clampedMouseX < screenRect.left) clampedMouseX = screenRect.left;
-    if (clampedMouseX > screenRect.right) clampedMouseX = screenRect.right;
-    if (clampedMouseY < screenRect.top) clampedMouseY = screenRect.top;
-    if (clampedMouseY > screenRect.bottom) clampedMouseY = screenRect.bottom;
-
     const leader = dragGroup.find(item => item.isLeader);
 
-    // 3. Вычисляем дельту сдвига лидера на основе курсора
-    leader.targetX = clampedMouseX - startX;
-    leader.targetY = clampedMouseY - startY;
-
+    // 2. Рассчитываем чистую дельту движения мыши от точки старта
+    leader.targetX = mouseX - startX;
+    leader.targetY = mouseY - startY;
     leader.currentX += (leader.targetX - leader.currentX) * 0.35;
     leader.currentY += (leader.targetY - leader.currentY) * 0.35;
+
+    // 3. Извлекаем ЧИСТЫЙ РАЗМЕР ШРИФТА в пикселях для текущего уровня зума
+    const currentFontSizeStr = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
+    const baseFontSize = parseInt(currentFontSizeStr) || 14;
 
     dragGroup.forEach(item => {
         if (!item.phantomEl) return;
@@ -404,46 +398,48 @@ function updateDragAnimation() {
             idealTranslateY = item.currentY;
         }
 
-        // 4. СБРОС МАСШТАБА ДЛЯ ТОЧНОГО ЗАМЕРА (ФИКС АСИММЕТРИИ)
-        // Временно убираем scale, чтобы замерить ЧИСТЫЕ границы элемента на экране
-        item.phantomEl.style.transform = "translate(" + idealTranslateX + "px, " + idealTranslateY + "px)";
+        // 4. МАТЕМАТИЧЕСКИЙ CLAMP ПО ВИДИМОМУ ТЕЛУ СИМВОЛА
+        // Рассчитываем, где окажется центр ЖЕСТКОЙ КЛЕЙКИ (начальный центр + translate)
+        const cellW = item.phantomEl.offsetWidth || 30;
+        const cellH = item.phantomEl.offsetHeight || 30;
 
-        // Замеряем, где элемент РЕАЛЬНО находится на экране в этот миллисекунду
-        const pRect = item.phantomEl.getBoundingClientRect();
+        const startCenterX = item.phantomStartX + (cellW / 2);
+        const startCenterY = item.phantomStartY + (cellH / 2);
 
-        let finalX = pRect.left;
-        let finalY = pRect.top;
+        let finalCenterX = startCenterX + idealTranslateX;
+        let finalCenterY = startCenterY + idealTranslateY;
 
-        // Рассчитываем визуальную поправку на scale(1.4) для лидера
-        // Так как scale увеличивает элемент из центра, его края расширятся во все стороны на 20%
-        const scaleBonusX = item.isLeader ? (pRect.width * 0.2) : 0;
-        const scaleBonusY = item.isLeader ? (pRect.height * 0.2) : 0;
+        // Вычисляем реальный видимый радиус цифры с учетом масштаба scale(1.4) для лидера
+        const currentScale = item.isLeader ? 1.4 : 1.0;
+        const visibleRadiusX = (baseFontSize * currentScale) / 2;
+        const visibleRadiusY = (baseFontSize * currentScale) / 2;
 
-        // --- ЖЕСТКИЙ CLAMP ПО ВСЕМ 4 СТОРОНАМ ---
-
-        // Левый край
-        if (finalX - scaleBonusX < screenRect.left) {
-            finalX = screenRect.left + scaleBonusX;
+        // --- ОГРАНИЧЕНИЕ ЛЕВОГО КРАЯ (Вплотную) ---
+        if (finalCenterX - visibleRadiusX < screenRect.left) {
+            finalCenterX = screenRect.left + visibleRadiusX;
         }
-        // Правый край
-        if (finalX + pRect.width + scaleBonusX > screenRect.right) {
-            finalX = screenRect.right - pRect.width - scaleBonusX;
+        // --- ОГРАНИЧЕНИЕ ПРАВОГО КРАЯ (Вплотную) ---
+        if (finalCenterX + visibleRadiusX > screenRect.right) {
+            finalCenterX = screenRect.right - visibleRadiusX;
         }
-        // Верхний край
-        if (finalY - scaleBonusY < screenRect.top) {
-            finalY = screenRect.top + scaleBonusY;
+        // --- ОГРАНИЧЕНИЕ ВЕРХНЕГО КРАЯ (Вплотную) ---
+        if (finalCenterY - visibleRadiusY < screenRect.top) {
+            finalCenterY = screenRect.top + visibleRadiusY;
         }
-        // Нижний край (разрешаем зайти в коробку ровно на половину высоты цифры)
-        const allowedBottomOut = pRect.height / 2;
-        if (finalY + pRect.height + scaleBonusY - allowedBottomOut > screenRect.bottom) {
-            finalY = screenRect.bottom - pRect.height + allowedBottomOut - scaleBonusY;
+        // --- ОГРАНИЧЕНИЕ НИЖНЕГО КРАЯ (Твоя идеальная логика с заходом в коробки) ---
+        // Разрешаем центру опускаться до самого низа, чтобы цифры проваливались в коробки наполовину
+        if (finalCenterY > screenRect.bottom) {
+            finalCenterY = screenRect.bottom;
         }
 
-        // 5. Переводим заблокированные экранные пиксели обратно в дельту translate для CSS
+        // 5. Переводим ограниченные координаты центра обратно в дельту translate для CSS
+        const finalX = finalCenterX - (cellW / 2);
+        const finalY = finalCenterY - (cellH / 2);
+
         const finalTranslateX = finalX - item.phantomStartX;
         const finalTranslateY = finalY - item.phantomStartY;
 
-        // 6. Отрисовываем фантомы с применением финального масштаба
+        // 6. Отрисовываем фантомы
         if (item.isLeader) {
             item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px) scale(1.4)";
         } else {
