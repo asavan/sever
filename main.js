@@ -9,13 +9,24 @@ const winScreen = document.getElementById('win-screen');
 
 let removedCount = 0;
 let binProgress = Array(5).fill(0);
-let cells = [];
 let predefinedGroups = {};
 
-let currentZoom = 1.0;
-const MIN_ZOOM = 1.0;
-const MAX_ZOOM = 2.5;
-const ZOOM_STEP = 0.25;
+// Эталонная виртуальная база данных
+let virtualMatrix = [];
+// Массив ссылок на созданные DOM-элементы цифр
+let domCells = Array(TOTAL_NUMBERS).fill(null);
+
+// Конфигурация 3 уровней «Камеры»
+const ZOOM_LEVELS = [
+    { viewCols: 28, viewRows: 12, fontSize: "14px" }, // Уровень 0 (Минимум)
+    { viewCols: 18, viewRows: 8,  fontSize: "24px" }, // Уровень 1 (Средний)
+    { viewCols: 10, viewRows: 5,  fontSize: "38px" }  // Уровень 2 (Максимум)
+];
+let currentZoomIndex = 0;
+
+// Текущее смещение виртуальной камеры (базовый левый верхний угол отрисовки)
+let cameraColOffset = 0;
+let cameraRowOffset = 0;
 
 let draggedElement = null;
 let dragGroup = [];
@@ -29,54 +40,48 @@ let mouseY = 0;
 
 let activeTouches = [];
 let initialPinchDistance = 0;
-let initialZoomOnPinchStart = 1.0;
+let initialZoomOnPinchStart = 0;
 
 function initMatrix() {
     grid.innerHTML = '';
-    cells = [];
+    virtualMatrix = [];
+    domCells = Array(TOTAL_NUMBERS).fill(null);
     removedCount = 0;
     binProgress = Array(5).fill(0);
     predefinedGroups = {};
-    currentZoom = 1.0;
+    currentZoomIndex = 0;
+    cameraColOffset = 0;
+    cameraRowOffset = 0;
 
-    grid.style.transform = "scale(1)";
-    grid.style.transformOrigin = "center center";
-
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            const cell = document.createElement('div');
-            cell.classList.add('num-cell');
-            cell.textContent = Math.floor(Math.random() * 10);
-            cell.dataset.row = r;
-            cell.dataset.col = c;
-            cell.dataset.index = r * COLS + c;
-
-            grid.appendChild(cell);
-            cells.push(cell);
-
-            cell.addEventListener('pointerdown', onPointerDown);
-        }
+    // 1. Генерируем скрытую виртуальную базу данных
+    for (let i = 0; i < TOTAL_NUMBERS; i++) {
+        const r = Math.floor(i / COLS);
+        const c = i % COLS;
+        virtualMatrix.push({
+            index: i,
+            row: r,
+            col: c,
+            value: Math.floor(Math.random() * 10),
+            visible: true
+        });
     }
 
-    cells.forEach(cell => {
-        const index = parseInt(cell.dataset.index);
-        const centerRow = parseInt(cell.dataset.row);
-        const centerCol = parseInt(cell.dataset.col);
+    // 2. Генерируем постоянные связи
+    virtualMatrix.forEach(item => {
         const attachedIndices = [];
-
-        cells.forEach(neighbor => {
-            if (neighbor === cell) return;
-            const nr = parseInt(neighbor.dataset.row);
-            const nc = parseInt(neighbor.dataset.col);
-
-            if (Math.abs(nr - centerRow) <= 1 && Math.abs(nc - centerCol) <= 1) {
+        virtualMatrix.forEach(neighbor => {
+            if (neighbor.index === item.index) return;
+            if (Math.abs(neighbor.row - item.row) <= 1 && Math.abs(neighbor.col - item.col) <= 1) {
                 if (Math.random() < 0.45) {
-                    attachedIndices.push(parseInt(neighbor.dataset.index));
+                    attachedIndices.push(neighbor.index);
                 }
             }
         });
-        predefinedGroups[index] = attachedIndices;
+        predefinedGroups[item.index] = attachedIndices;
     });
+
+    // Отрендерить камеру
+    renderViewport();
 
     container.addEventListener('wheel', onContainerWheel, { passive: false });
     container.addEventListener('pointerdown', onContainerPointerDown);
@@ -85,151 +90,198 @@ function initMatrix() {
     container.addEventListener('pointercancel', onContainerPointerUp);
 }
 
+function renderViewport() {
+    grid.innerHTML = '';
+    const cfg = ZOOM_LEVELS.at(currentZoomIndex);
+
+    // Передаем в CSS размеры окна видимости
+    grid.style.setProperty('--view-cols', cfg.viewCols);
+    grid.style.setProperty('--view-rows', cfg.viewRows);
+    grid.style.setProperty('--cell-font-size', cfg.fontSize);
+
+    // Отрисовываем только те цифры, которые попадают в окно камеры
+    for (let r = 0; r < cfg.viewRows; r++) {
+        for (let c = 0; c < cfg.viewCols; c++) {
+            const targetRow = cameraRowOffset + r;
+            const targetCol = cameraColOffset + c;
+
+            if (targetRow >= 0 && targetRow < ROWS && targetCol >= 0 && targetCol < COLS) {
+                const vIdx = targetRow * COLS + targetCol;
+                const vItem = virtualMatrix.at(vIdx);
+
+                if (vItem && vItem.visible) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('num-cell');
+                    cell.textContent = vItem.value;
+                    cell.dataset.index = vItem.index;
+                    cell.dataset.row = vItem.row;
+                    cell.dataset.col = vItem.col;
+
+                    grid.appendChild(cell);
+                    domCells.splice(vIdx, 1, cell);
+                    cell.addEventListener('pointerdown', onPointerDown);
+                } else {
+                    // Место под убранную цифру
+                    grid.appendChild(document.createElement('div'));
+                }
+            } else {
+                // Пустая зона за краем эталонной матрицы
+                grid.appendChild(document.createElement('div'));
+            }
+        }
+    }
+}
+
+function updateCameraFocus(focusRow, focusCol, oldZoomIdx, newZoomIdx) {
+    const oldCfg = ZOOM_LEVELS.at(oldZoomIdx);
+    const newCfg = ZOOM_LEVELS.at(newZoomIdx);
+
+    // Рассчитываем, где фокусная цифра находилась внутри старого окна просмотра (в процентах)
+    const relX = (focusCol - cameraColOffset) / oldCfg.viewCols;
+    const relY = (focusRow - cameraRowOffset) / oldCfg.viewRows;
+
+    // Сдвигаем левый верхний угол новой камеры так, чтобы пропорции фокуса сохранились
+    let newColOffset = Math.round(focusCol - (relX * newCfg.viewCols));
+    let newRowOffset = Math.round(focusRow - (relY * newCfg.viewRows));
+
+    // Удерживаем камеру в рамках эталонного поля 28x12
+    cameraColOffset = Math.max(0, Math.min(COLS - newCfg.viewCols, newColOffset));
+    cameraRowOffset = Math.max(0, Math.min(ROWS - newCfg.viewRows, newRowOffset));
+
+    renderViewport();
+}
+
 function onContainerWheel(e) {
     e.preventDefault();
-    const rect = container.getBoundingClientRect();
-    const originX = ((e.clientX - rect.left) / rect.width) * 100;
-    const originY = ((e.clientY - rect.top) / rect.height) * 100;
+    if (isDragging) return;
 
-    if (e.deltaY < 0) {
-        if (currentZoom < MAX_ZOOM) currentZoom += ZOOM_STEP;
-    } else {
-        if (currentZoom > MIN_ZOOM) currentZoom -= ZOOM_STEP;
+    // Ищем, над какой цифрой сейчас находится курсор
+    const targetCell = e.target.closest('.num-cell');
+    let focusRow = cameraRowOffset + Math.floor(ZOOM_LEVELS.at(currentZoomIndex).viewRows / 2);
+    let focusCol = cameraColOffset + Math.floor(ZOOM_LEVELS.at(currentZoomIndex).viewCols / 2);
+
+    if (targetCell) {
+        focusRow = parseInt(targetCell.dataset.row);
+        focusCol = parseInt(targetCell.dataset.col);
     }
 
-    grid.style.transformOrigin = originX + "% " + originY + "%";
-    grid.style.transform = "scale(" + currentZoom + ")";
+    const oldIndex = currentZoomIndex;
+    if (e.deltaY < 0) {
+        if (currentZoomIndex < ZOOM_LEVELS.length - 1) currentZoomIndex++;
+    } else {
+        if (currentZoomIndex > 0) currentZoomIndex--;
+    }
+
+    if (oldIndex !== currentZoomIndex) {
+        updateCameraFocus(focusRow, focusCol, oldIndex, currentZoomIndex);
+    }
 }
 
 function onContainerPointerDown(e) {
     const index = activeTouches.findIndex(t => t.pointerId === e.pointerId);
-    if (index > -1) {
-        activeTouches.splice(index, 1, e);
-    } else {
-        activeTouches.push(e);
-    }
+    if (index > -1) activeTouches.splice(index, 1, e);
+    else activeTouches.push(e);
 
-    if (activeTouches.length === 2) {
-        if (isDragging) cancelDrag();
-
-        const firstTouch = activeTouches.at(0);
-        const secondTouch = activeTouches.at(1);
-
-        initialPinchDistance = getDistance(firstTouch, secondTouch);
-        initialZoomOnPinchStart = currentZoom;
-
-        const rect = container.getBoundingClientRect();
-        const midX = (firstTouch.clientX + secondTouch.clientX) / 2 - rect.left;
-        const midY = (firstTouch.clientY + secondTouch.clientY) / 2 - rect.top;
-
-        grid.style.transformOrigin = ((midX / rect.width) * 100) + "% " + ((midY / rect.height) * 100) + "%";
+    if (activeTouches.length === 2 && !isDragging) {
+        const first = activeTouches.at(0);
+        const second = activeTouches.at(1);
+        initialPinchDistance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+        initialZoomOnPinchStart = currentZoomIndex;
     }
 }
 
 function onContainerPointerMove(e) {
     const index = activeTouches.findIndex(t => t.pointerId === e.pointerId);
-    if (index > -1) {
-        activeTouches.splice(index, 1, e);
-    }
+    if (index > -1) activeTouches.splice(index, 1, e);
 
-    if (activeTouches.length === 2) {
-        const firstTouch = activeTouches.at(0);
-        const secondTouch = activeTouches.at(1);
+    if (activeTouches.length === 2 && initialPinchDistance > 0) {
+        const first = activeTouches.at(0);
+        const second = activeTouches.at(1);
+        const currentDistance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
 
-        const currentDistance = getDistance(firstTouch, secondTouch);
-        if (initialPinchDistance > 0) {
-            const factor = currentDistance / initialPinchDistance;
-            let targetZoom = initialZoomOnPinchStart * factor;
+        const ratio = currentDistance / initialPinchDistance;
+        let targetIndex = initialZoomOnPinchStart;
 
-            targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoom));
-            currentZoom = targetZoom;
-            grid.style.transform = "scale(" + currentZoom + ")";
+        if (ratio > 1.4) targetIndex = Math.min(ZOOM_LEVELS.length - 1, initialZoomOnPinchStart + 1);
+        if (ratio > 2.0) targetIndex = ZOOM_LEVELS.length - 1;
+        if (ratio < 0.7) targetIndex = Math.max(0, initialZoomOnPinchStart - 1);
+
+        if (targetIndex !== currentZoomIndex) {
+            const oldIdx = currentZoomIndex;
+            currentZoomIndex = targetIndex;
+
+            let focusRow = cameraRowOffset + Math.floor(ROWS / 2);
+            let focusCol = cameraColOffset + Math.floor(COLS / 2);
+            updateCameraFocus(focusRow, focusCol, oldIdx, currentZoomIndex);
         }
     }
 }
 
 function onContainerPointerUp(e) {
     activeTouches = activeTouches.filter(t => t.pointerId !== e.pointerId);
-    if (activeTouches.length < 2) {
-        initialPinchDistance = 0;
-    }
-}
-
-function getDistance(t1, t2) {
-    return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+    if (activeTouches.length < 2) initialPinchDistance = 0;
 }
 
 function getAttachedGroup(centerCell) {
     const group = [];
-    const leaderRow = parseInt(centerCell.dataset.row);
-    const leaderCol = parseInt(centerCell.dataset.col);
+    const leaderIndex = parseInt(centerCell.dataset.index);
 
-    const cellWidth = centerCell.offsetWidth || 30;
-    const cellHeight = centerCell.offsetHeight || 30;
+    const leaderRect = centerCell.getBoundingClientRect();
+    const lCenterX = leaderRect.left + leaderRect.width / 2;
+    const lCenterY = leaderRect.top + leaderRect.height / 2;
 
     group.push({
-        el: centerCell,
-        currentX: 0,
-        currentY: 0,
-        targetX: 0,
-        targetY: 0,
-        isLeader: true,
-        gridOffsetX: 0,
-        gridOffsetY: 0
+        el: centerCell, vIdx: leaderIndex, currentX: 0, currentY: 0,
+        targetX: 0, targetY: 0, isLeader: true, gridOffsetX: 0, gridOffsetY: 0
     });
 
-    const leaderIndex = parseInt(centerCell.dataset.index);
     const savedNeighborIndices = predefinedGroups[leaderIndex] || [];
 
     savedNeighborIndices.forEach(idx => {
-        const cell = cells.find(c => parseInt(c.dataset.index) === idx);
-        if (cell && cell.style.visibility !== "hidden") {
-            const nr = parseInt(cell.dataset.row);
-            const nc = parseInt(cell.dataset.col);
-
-            group.push({
-                el: cell,
-                currentX: 0,
-                currentY: 0,
-                targetX: 0,
-                targetY: 0,
-                isLeader: false,
-                gridOffsetX: (nc - leaderCol) * cellWidth,
-                gridOffsetY: (nr - leaderRow) * cellHeight
-            });
+        const vItem = virtualMatrix.at(idx);
+        if (vItem && vItem.visible) {
+            const cell = domCells.at(idx);
+            if (cell) {
+                // Если сосед виден в окне камеры, замеряем его точную дельту
+                const cellRect = cell.getBoundingClientRect();
+                group.push({
+                    el: cell, vIdx: idx, currentX: 0, currentY: 0, targetX: 0, targetY: 0, isLeader: false,
+                    gridOffsetX: (cellRect.left + cellRect.width / 2) - lCenterX,
+                    gridOffsetY: (cellRect.top + cellRect.height / 2) - lCenterY
+                });
+            } else {
+                // Если сосед за кадром, симулируем его отступ на основе размеров лидера
+                const cW = centerCell.offsetWidth;
+                const cH = centerCell.offsetHeight;
+                const vLeader = virtualMatrix.at(leaderIndex);
+                group.push({
+                    el: null, vIdx: idx, currentX: 0, currentY: 0, targetX: 0, targetY: 0, isLeader: false,
+                    gridOffsetX: (vItem.col - vLeader.col) * cW,
+                    gridOffsetY: (vItem.row - vLeader.row) * cH
+                });
+            }
         }
     });
-
     return group;
 }
 
 function onPointerDown(e) {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
-    if (activeTouches.length >= 2) return;
+    if (activeTouches.length >= 2 || isDragging) return;
 
     draggedElement = e.currentTarget;
-    if (draggedElement.style.visibility === "hidden") return;
-
     isDragging = true;
     draggedElement.setPointerCapture(e.pointerId);
 
-    startX = e.clientX;
-    startY = e.clientY;
-    mouseX = e.clientX;
-    mouseY = e.clientY;
+    startX = e.clientX; startY = e.clientY;
+    mouseX = e.clientX; mouseY = e.clientY;
 
     dragGroup = getAttachedGroup(draggedElement);
-
     dragGroup.forEach(item => {
-        if (item.isLeader) {
-            item.el.classList.add('dragging');
-        } else {
-            item.el.classList.add('drag-group');
-        }
+        if (item.el) item.el.classList.add(item.isLeader ? 'dragging' : 'drag-group');
     });
 
     updateDragAnimation();
-
     draggedElement.addEventListener('pointermove', onPointerMove);
     draggedElement.addEventListener('pointerup', onPointerUp);
     draggedElement.addEventListener('pointercancel', onPointerUp);
@@ -237,46 +289,13 @@ function onPointerDown(e) {
 
 function onPointerMove(e) {
     if (!isDragging) return;
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    checkBinsHover(mouseX, mouseY);
-}
+    mouseX = e.clientX; mouseY = e.clientY;
 
-function updateDragAnimation() {
-    if (!isDragging) return;
-
-    const leader = dragGroup.find(item => item.isLeader);
-
-    leader.targetX = (mouseX - startX) / currentZoom;
-    leader.targetY = (mouseY - startY) / currentZoom;
-
-    leader.currentX += (leader.targetX - leader.currentX) * 0.35;
-    leader.currentY += (leader.targetY - leader.currentY) * 0.35;
-
-    dragGroup.forEach(item => {
-        if (item.isLeader) {
-            item.el.style.transform = "translate(" + item.currentX + "px, " + item.currentY + "px)";
-        } else {
-            const compressionFactor = 0.6;
-
-            item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
-            item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
-
-            item.currentX += (item.targetX - item.currentX) * 0.15;
-            item.currentY += (item.targetY - item.currentY) * 0.15;
-
-            item.el.style.transform = "translate(" + item.currentX + "px, " + item.currentY + "px)";
-        }
-    });
-
-    animationFrameId = requestAnimationFrame(updateDragAnimation);
-}
-
-function checkBinsHover(x, y) {
+    // Проверка коробок
     const bins = document.querySelectorAll('.bin');
     bins.forEach(bin => {
-        const rect = bin.getBoundingClientRect();
-        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        const r = bin.getBoundingClientRect();
+        if (mouseX >= r.left && mouseX <= r.right && mouseY >= r.top && mouseY <= r.bottom) {
             bin.classList.add('drag-over');
         } else {
             bin.classList.remove('drag-over');
@@ -284,39 +303,66 @@ function checkBinsHover(x, y) {
     });
 }
 
+function updateDragAnimation() {
+    if (!isDragging) return;
+    const leader = dragGroup.find(item => item.isLeader);
+
+    leader.targetX = mouseX - startX;
+    leader.targetY = mouseY - startY;
+    leader.currentX += (leader.targetX - leader.currentX) * 0.35;
+    leader.currentY += (leader.targetY - leader.currentY) * 0.35;
+
+    dragGroup.forEach(item => {
+        if (!item.el) return; // Игнорируем соседей, которые за кадром
+        if (item.isLeader) {
+            item.el.style.transform = "translate(" + item.currentX + "px, " + item.currentY + "px)";
+        } else {
+            // КОЭФФИЦИЕНТ СТЯГИВАНИЯ:
+            // 1.0 — цифры летят строго параллельно на своих местах из сетки
+            // 0.6 — плавно притягиваются чуть ближе к лидеру в процессе движения
+            const compressionFactor = 0.6;
+
+            // Исправленная математическая формула для сохранения структуры:
+            item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
+            item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
+
+            item.currentX += (item.targetX - item.currentX) * 0.15;
+            item.currentY += (item.targetY - item.currentY) * 0.15;
+            item.el.style.transform = "translate(" + item.currentX + "px, " + item.currentY + "px)";
+        }
+    });
+    animationFrameId = requestAnimationFrame(updateDragAnimation);
+}
+
 function onPointerUp(e) {
     if (!isDragging) return;
     isDragging = false;
-
     cancelAnimationFrame(animationFrameId);
-
-    const x = e.clientX;
-    const y = e.clientY;
 
     let droppedInBin = null;
     const bins = document.querySelectorAll('.bin');
-
     bins.forEach(bin => {
-        const rect = bin.getBoundingClientRect();
-        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-            droppedInBin = bin;
-        }
+        const r = bin.getBoundingClientRect();
+        if (mouseX >= r.left && mouseX <= r.right && mouseY >= r.top && mouseY <= r.bottom) droppedInBin = bin;
         bin.classList.remove('drag-over');
     });
 
     if (droppedInBin) {
         const binIndex = parseInt(droppedInBin.dataset.bin) - 1;
-        const itemsCount = dragGroup.length;
 
+        // Помечаем всю группу как удаленную в виртуальной матрице
         dragGroup.forEach(item => {
-            item.el.style.visibility = "hidden";
-            resetElementStyles(item.el);
+            const vItem = virtualMatrix.at(item.vIdx);
+            if (vItem) vItem.visible = false;
+            if (item.el) resetElementStyles(item.el);
         });
 
-        updateBinProgress(binIndex, itemsCount);
+        // Перерисовываем камеру (удаленные цифры исчезнут честно)
+        updateBinProgress(binIndex, dragGroup.length);
+        renderViewport();
     } else {
         dragGroup.forEach(item => {
-            resetElementStyles(item.el);
+            if (item.el) resetElementStyles(item.el);
         });
     }
 
@@ -326,7 +372,6 @@ function onPointerUp(e) {
         draggedElement.removeEventListener('pointerup', onPointerUp);
         draggedElement.removeEventListener('pointercancel', onPointerUp);
     }
-
     draggedElement = null;
     dragGroup = [];
 }
@@ -334,9 +379,7 @@ function onPointerUp(e) {
 function cancelDrag() {
     isDragging = false;
     cancelAnimationFrame(animationFrameId);
-    dragGroup.forEach(item => {
-        resetElementStyles(item.el);
-    });
+    dragGroup.forEach(item => { if (item.el) resetElementStyles(item.el); });
     draggedElement = null;
     dragGroup = [];
 }
@@ -345,23 +388,15 @@ function resetElementStyles(el) {
     el.classList.remove('dragging', 'drag-group');
     el.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1)';
     el.style.transform = '';
-
-    setTimeout(() => {
-        el.style.transition = '';
-    }, 300);
+    setTimeout(() => { el.style.transition = ''; }, 300);
 }
 
 function updateBinProgress(binIndex, count) {
     removedCount += count;
-
-    // Рассчитываем «вместимость» одной коробки (20% от общего числа цифр)
     const binCapacity = TOTAL_NUMBERS / 5;
-
-    // Считаем, сколько процентов добавляет каждая перетащенная цифра
     const percentPerItem = 100 / binCapacity;
 
     const currentProgress = binProgress.at(binIndex);
-    // Прибавляем прогресс на основе количества перетащенных цифр (count)
     const newProgress = Math.min(100, Math.floor(currentProgress + (count * percentPerItem)));
     binProgress.splice(binIndex, 1, newProgress);
 
@@ -372,15 +407,7 @@ function updateBinProgress(binIndex, count) {
     totalPercentEl.textContent = totalPercent + "%";
 
     if (removedCount >= TOTAL_NUMBERS) {
-        for(let i = 1; i <= 5; i++) {
-            document.getElementById("fill-" + i).style.width = '100%';
-            document.getElementById("percent-" + i).textContent = '100%';
-        }
-        totalPercentEl.textContent = '100%';
-
-        setTimeout(() => {
-            winScreen.classList.add('active');
-        }, 500);
+        winScreen.classList.add('active');
     }
 }
 
