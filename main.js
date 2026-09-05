@@ -6,119 +6,194 @@ const grid = document.getElementById('matrix-grid');
 const totalPercentEl = document.getElementById('total-percent');
 const winScreen = document.getElementById('win-screen');
 
-let initialCount = TOTAL_NUMBERS;
 let removedCount = 0;
-let binProgress = [0, 0, 0, 0, 0]; // Прогресс для 5 коробок
-
-// Хранилище объектов клеток
+let binProgress = [0, 0, 0, 0, 0];
 let cells = [];
 
-// Переменные состояния перетаскивания
-let draggedElement = null;
-let dragGroup = []; // Список элементов, которые "прилипли"
-let isDragging = false;
+// Карта постоянных связей: для каждого индекса ячейки сохраняем массив индексов её "прилипал"
+let predefinedGroups = {};
 
-// Инициализация сетки чисел
+// Переменные состояния мыши и Drag&Drop
+let draggedElement = null;
+let dragGroup = []; // Массив объектов для группы { el, startX, startY, currentX, currentY, targetX, targetY, isLeader }
+let isDragging = false;
+let animationFrameId = null;
+
+// Координаты мыши относительно экрана
+let mouseX = 0;
+let mouseY = 0;
+
 function initMatrix() {
     grid.innerHTML = '';
     cells = [];
-    
+    removedCount = 0;
+    binProgress = [0, 0, 0, 0, 0];
+    predefinedGroups = {};
+
+    // 1. Создаем элементы в сетке
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
             const cell = document.createElement('div');
             cell.classList.add('num-cell');
             cell.textContent = Math.floor(Math.random() * 10);
-            
-            // Сохраняем координаты в dataset для поиска соседей
             cell.dataset.row = r;
             cell.dataset.col = c;
-            
+            cell.dataset.index = r * COLS + c; // уникальный индекс
+
             grid.appendChild(cell);
             cells.push(cell);
-            
-            // Вешаем обработчики указателя (для мыши)
+
             cell.addEventListener('pointerdown', onPointerDown);
         }
     }
+
+    // 2. СРАЗУ ГЕНЕРИРУЕМ И ЗАПОМИНАЕМ СВЯЗИ ДЛЯ ВСЕХ ЧИСЕЛ (Один раз на всю игру)
+    cells.forEach(cell => {
+        const index = parseInt(cell.dataset.index);
+        const centerRow = parseInt(cell.dataset.row);
+        const centerCol = parseInt(cell.dataset.col);
+        const attachedIndices = [];
+
+        cells.forEach(neighbor => {
+            if (neighbor === cell) return;
+            const nr = parseInt(neighbor.dataset.row);
+            const nc = parseInt(neighbor.dataset.col);
+
+            // Если это сосед в радиусе 1 клетки
+            if (Math.abs(nr - centerRow) <= 1 && Math.abs(nc - centerCol) <= 1) {
+                // Шанс 45%, что этот сосед навсегда закрепится за этим числом
+                if (Math.random() < 0.45) {
+                    attachedIndices.push(parseInt(neighbor.dataset.index));
+                }
+            }
+        });
+
+        // Сохраняем группу для этой ячейки
+        predefinedGroups[index] = attachedIndices;
+    });
 }
 
-// Поиск случайных соседей в радиусе вокруг зажатой цифры
+// Получение группы на основе ЗАПОМНЕННЫХ связей
 function getAttachedGroup(centerCell) {
-    const group = [centerCell];
-    const centerRow = parseInt(centerCell.dataset.row);
-    const centerCol = parseInt(centerCell.dataset.col);
-    
-    // Перебираем область 3x3 вокруг элемента
-    cells.forEach(cell => {
-        if (cell === centerCell || cell.style.visibility === 'hidden') return;
-        
-        const r = parseInt(cell.dataset.row);
-        const c = parseInt(cell.dataset.col);
-        
-        if (Math.abs(r - centerRow) <= 1 && Math.abs(c - centerCol) <= 1) {
-            // Вероятность 40%, что соседняя цифра "прилипнет" к группе
-            if (Math.random() < 0.4) {
-                group.push(cell);
-            }
+    const group = [];
+    const leaderRect = centerCell.getBoundingClientRect();
+    const leaderCenterX = leaderRect.left + leaderRect.width / 2;
+    const leaderCenterY = leaderRect.top + leaderRect.height / 2;
+
+    // Добавляем лидера
+    group.push({
+        el: centerCell,
+        startX: leaderCenterX,
+        startY: leaderCenterY,
+        currentX: 0,
+        currentY: 0,
+        targetX: 0,
+        targetY: 0,
+        isLeader: true
+    });
+
+    // Извлекаем из памяти сохраненных соседей для этого числа
+    const leaderIndex = parseInt(centerCell.dataset.index);
+    const savedNeighborIndices = predefinedGroups[leaderIndex] || [];
+
+    savedNeighborIndices.forEach(idx => {
+        const cell = cells[idx];
+        // Берем соседа, только если он еще не собран в коробку (видим на экране)
+        if (cell && cell.style.visibility !== 'hidden') {
+            const cellRect = cell.getBoundingClientRect();
+            const cellCenterX = cellRect.left + cellRect.width / 2;
+            const cellCenterY = cellRect.top + cellRect.height / 2;
+
+            group.push({
+                el: cell,
+                startX: cellCenterX,
+                startY: cellCenterY,
+                currentX: 0,
+                currentY: 0,
+                targetX: 0,
+                targetY: 0,
+                isLeader: false,
+                // Исходное смещение соседа относительно лидера в сетке
+                offsetX: cellCenterX - leaderCenterX,
+                offsetY: cellCenterY - leaderCenterY
+            });
         }
     });
-    
+
     return group;
 }
 
 function onPointerDown(e) {
-    if (e.button !== 0) return; // Только левая кнопка мыши
-    
+    if (e.button !== 0) return; // Только ЛКМ
+
     draggedElement = e.currentTarget;
     if (draggedElement.style.visibility === 'hidden') return;
 
     isDragging = true;
     draggedElement.setPointerCapture(e.pointerId);
 
-    // Собираем "прилипшую" группу
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+
+    // Собираем группу (она всегда будет одинаковой для этого числа!)
     dragGroup = getAttachedGroup(draggedElement);
-    
-    // Визуально подсвечиваем всю группу
-    dragGroup.forEach(el => {
-        if (el === draggedElement) {
-            el.classList.add('dragging');
+
+    dragGroup.forEach(item => {
+        if (item.isLeader) {
+            item.el.classList.add('dragging');
         } else {
-            el.classList.add('drag-group');
+            item.el.classList.add('drag-group');
         }
     });
 
-    // Навешиваем глобальные слушатели перемещения и отпускания
+    updateDragAnimation();
+
     draggedElement.addEventListener('pointermove', onPointerMove);
     draggedElement.addEventListener('pointerup', onPointerUp);
 }
 
 function onPointerMove(e) {
     if (!isDragging) return;
+    mouseX = e.clientX;
+    mouseY = e.clientY;
 
-    // Двигаем главный элемент за курсором
-    // Смещение рассчитывается так, чтобы элемент центрировался по курсору
-    const x = e.clientX;
-    const y = e.clientY;
-    
-    // Для простоты визуализации группа следует за движениями главного элемента через CSS-трансформацию
-    draggedElement.style.position = 'fixed';
-    draggedElement.style.left = `${x}px`;
-    draggedElement.style.top = `${y}px`;
-    draggedElement.style.transform = 'translate(-50%, -50%) scale(1.5)';
+    checkBinsHover(mouseX, mouseY);
+}
 
-    // Тянем за собой остальных участников группы с небольшим смещением
-    dragGroup.forEach((el, index) => {
-        if (el === draggedElement) return;
-        el.style.position = 'fixed';
-        // Каждому соседу даем легкий разброс, создавая эффект "кучки" элементов
-        const offsetX = (index % 2 === 0 ? 20 : -20) * Math.ceil(index/2);
-        const offsetY = (index % 3 === 0 ? 20 : -10);
-        el.style.left = `${x + offsetX}px`;
-        el.style.top = `${y + offsetY}px`;
+// Физика движения группы с эффектом легкого стягивания к центру
+function updateDragAnimation() {
+    if (!isDragging) return;
+
+    const leader = dragGroup.find(item => item.isLeader);
+
+    dragGroup.forEach(item => {
+        if (item.isLeader) {
+            item.targetX = mouseX - item.startX;
+            item.targetY = mouseY - item.startY;
+
+            // Мягкое следование лидера за курсором
+            item.currentX += (item.targetX - item.currentX) * 0.4;
+            item.currentY += (item.targetY - item.currentY) * 0.4;
+
+            item.el.style.transform = `translate(${item.currentX}px, ${item.currentY}px) scale(1.6)`;
+        } else {
+            // ЭФФЕКТ ПРИТЯЖЕНИЯ И ЗАПАЗДЫВАНИЯ:
+            // Умножаем offsetX и offsetY на коэффициент меньше 1 (например, 0.5),
+            // чтобы соседи не разлетались, а слегка стягивались к центру пучка при таскании.
+            const compressionFactor = 0.5;
+
+            item.targetX = leader.currentX + (item.offsetX * compressionFactor);
+            item.targetY = leader.currentY + (item.offsetY * compressionFactor);
+
+            // Плавное догоняние (LERP)
+            item.currentX += (item.targetX - item.currentX) * 0.15;
+            item.currentY += (item.targetY - item.currentY) * 0.15;
+
+            item.el.style.transform = `translate(${item.currentX}px, ${item.currentY}px) scale(1.2)`;
+        }
     });
 
-    // Проверяем, находится ли курсор над какой-то из коробок (Bins)
-    checkBinsHover(x, y);
+    animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
 
 function checkBinsHover(x, y) {
@@ -137,13 +212,14 @@ function onPointerUp(e) {
     if (!isDragging) return;
     isDragging = false;
 
-    // Вычисляем, куда бросили кучку
+    cancelAnimationFrame(animationFrameId);
+
     const x = e.clientX;
     const y = e.clientY;
-    
+
     let droppedInBin = null;
     const bins = document.querySelectorAll('.bin');
-    
+
     bins.forEach(bin => {
         const rect = bin.getBoundingClientRect();
         if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
@@ -153,74 +229,60 @@ function onPointerUp(e) {
     });
 
     if (droppedInBin) {
-        // Успешно сбросили в коробку!
         const binIndex = parseInt(droppedInBin.dataset.bin) - 1;
         const itemsCount = dragGroup.length;
 
-        // "Уничтожаем" элементы (скрываем их)
-        dragGroup.forEach(el => {
-            el.style.visibility = 'hidden';
-            resetElementStyles(el);
+        dragGroup.forEach(item => {
+            item.el.style.visibility = 'hidden';
+            resetElementStyles(item.el);
         });
 
-        // Начисляем очки прогресса коробке
         updateBinProgress(binIndex, itemsCount);
     } else {
-        // Вернуть элементы на свои места в сетку
-        dragGroup.forEach(el => {
-            resetElementStyles(el);
+        dragGroup.forEach(item => {
+            resetElementStyles(item.el);
         });
     }
 
-    // Очистка состояния
     draggedElement.releasePointerCapture(e.pointerId);
     draggedElement.removeEventListener('pointermove', onPointerMove);
     draggedElement.removeEventListener('pointerup', onPointerUp);
-    
+
     draggedElement = null;
     dragGroup = [];
 }
 
-// Сброс временных стилей перетаскивания и возвращение в сетку
 function resetElementStyles(el) {
     el.classList.remove('dragging', 'drag-group');
-    el.style.position = '';
-    el.style.left = '';
-    el.style.top = '';
+    el.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1)';
     el.style.transform = '';
+
+    setTimeout(() => {
+        el.style.transition = '';
+    }, 300);
 }
 
-// Обновление прогресс-баров коробок и общего счетчика файлов
 function updateBinProgress(binIndex, count) {
     removedCount += count;
-    
-    // В оригинальной игре коробки заполняются неравномерно, распределим "вес"
-    // Ограничиваем каждую коробку максимум в 100%
-    binProgress[binIndex] = Math.min(100, binProgress[binIndex] + (count * 4)); 
+    binProgress[binIndex] = Math.min(100, binProgress[binIndex] + (count * 4));
 
-    // Визуализируем изменения коробок
     document.getElementById(`fill-${binIndex + 1}`).style.width = `${binProgress[binIndex]}%`;
     document.getElementById(`percent-${binIndex + 1}`).textContent = `${binProgress[binIndex]}%`;
 
-    // Считаем общий процент прогресса на основе оставшихся чисел на поле
     const totalPercent = Math.min(100, Math.floor((removedCount / TOTAL_NUMBERS) * 100));
     totalPercentEl.textContent = `${totalPercent}%`;
 
-    // Условие победы (все числа убраны с поля)
     if (removedCount >= TOTAL_NUMBERS) {
-        // Принудительно ставим бары на 100% для красоты
         for(let i=1; i<=5; i++) {
             document.getElementById(`fill-${i}`).style.width = '100%';
             document.getElementById(`percent-${i}`).textContent = '100%';
         }
         totalPercentEl.textContent = '100%';
-        
-        // Показываем экран победы
+
         setTimeout(() => {
             winScreen.classList.add('active');
         }, 500);
     }
 }
 
-// Запуск игры
 initMatrix();

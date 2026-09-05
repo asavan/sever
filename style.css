@@ -110,10 +110,11 @@ body {
     color: #31a2cc;
     font-size: 14px;
     font-weight: bold;
-    transition: transform 0.2s ease, color 0.2s ease;
+    transition: transform 0.1s ease, color 0.2s ease;
     cursor: grab;
     position: relative;
     z-index: 2;
+    will-change: transform;
 }
 
 /* Интерактивное увеличение при наведении */
@@ -124,20 +125,19 @@ body {
     z-index: 5;
 }
 
-/* Стили при перетаскивании кучки чисел */
+/* Состояния перетаскивания (убираем CSS-транзишены для плавного JS перемещения) */
 .num-cell.dragging {
-    opacity: 0.8;
+    transition: none;
     color: #ffffff !important;
     text-shadow: 0 0 12px #4df3ff, 0 0 20px #4df3ff;
-    transform: scale(1.4);
     z-index: 100;
     cursor: grabbing;
 }
 
 .num-cell.drag-group {
+    transition: none;
     color: #8be4ff;
     text-shadow: 0 0 6px #4df3ff;
-    transform: scale(1.2);
     z-index: 90;
 }
 
@@ -147,6 +147,8 @@ body {
     padding: 10px 20px;
     background-color: #011c2e;
     color: #31a2cc;
+    position: relative;
+    z-index: 110;
 }
 
 .bins-container {
