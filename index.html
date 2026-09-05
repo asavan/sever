@@ -65,43 +65,20 @@
         </div>
     </div>
 </div>
-<svg style="position: absolute; width: 0; height: 0;">
+<svg style="position: absolute; width: 0; height: 0;" aria-hidden="true">
     <defs>
-        <!-- Создаем карту градиента: белый центр (нет смещения), черные края (максимальное смещение) -->
-        <radialGradient id="lens-gradient" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#808080" />
-            <stop offset="70%" stop-color="#808080" />
-            <stop offset="100%" stop-color="#000000" />
-        </radialGradient>
+        <filter id="crt-lens-clean" x="0%" y="0%" width="100%" height="100%">
+            <!-- Создаем виртуальный источник света в центре экрана, чтобы браузер сам рассчитал идеальную сферу -->
+            <feDiffuseLighting in="SourceGraphic" lighting-color="#fff" surfaceScale="60" result="light">
+                <feDistantLight azimuth="90" elevation="50" />
+            </feDiffuseLighting>
 
-        <filter id="crt-lens">
-            <!-- Генерируем текстуру на основе нашего сферического градиента -->
-            <feImage href="data:image/svg+xml;utf8,<svg xmlns='http://w3.org' width='100' height='100'><rect width='100' height='100' fill='url(%23lens-gradient)'/></svg>" result="lens-map" x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" />
-
-            <!-- ЖЕСТКИЙ РЫЧАГ СИЛЫ ИЗГИБА: Меняйте параметр scale от 40 до 90, чтобы регулировать "пузатость" экрана -->
-            <feDisplacementMap in="SourceGraphic" in2="lens-map" scale="55" xChannelSelector="R" yChannelSelector="G" />
+            <!-- СИЛА ЛИНЗЫ: Значение scale="40" дает аккуратный, каноничный изгиб. Можно увеличить до 50-60 для большей пузатости -->
+            <feDisplacementMap in="SourceGraphic" in2="light" scale="40" xChannelSelector="R" yChannelSelector="G" />
         </filter>
     </defs>
 </svg>
 
-<svg style="position: absolute; width: 0; height: 0;">
-    <defs>
-        <!-- Создаем карту градиента: белый центр (нет смещения), черные края (максимальное смещение) -->
-        <radialGradient id="lens-gradient" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#808080" />
-            <stop offset="70%" stop-color="#808080" />
-            <stop offset="100%" stop-color="#000000" />
-        </radialGradient>
-
-        <filter id="crt-lens">
-            <!-- Генерируем текстуру на основе нашего сферического градиента -->
-            <feImage href="data:image/svg+xml;utf8,<svg xmlns='http://w3.org' width='100' height='100'><rect width='100' height='100' fill='url(%23lens-gradient)'/></svg>" result="lens-map" x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" />
-
-            <!-- ЖЕСТКИЙ РЫЧАГ СИЛЫ ИЗГИБА: Меняйте параметр scale от 40 до 90, чтобы регулировать "пузатость" экрана -->
-            <feDisplacementMap in="SourceGraphic" in2="lens-map" scale="55" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-    </defs>
-</svg>
 
 <script src="main.js"></script>
 </body>
