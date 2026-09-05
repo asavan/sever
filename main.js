@@ -7,7 +7,7 @@ const totalPercentEl = document.getElementById('total-percent');
 const winScreen = document.getElementById('win-screen');
 
 let removedCount = 0;
-let binProgress = [0, 0, 0, 0, 0];
+let binProgress = Array(5).fill(0); // Создает массив из 5 нулей без использования скобок [ ]
 let cells = [];
 
 // Карта постоянных связей: для каждого индекса ячейки сохраняем массив индексов её "прилипал"
@@ -15,9 +15,13 @@ let predefinedGroups = {};
 
 // Переменные состояния мыши и Drag&Drop
 let draggedElement = null;
-let dragGroup = []; // Массив объектов для группы { el, startX, startY, currentX, currentY, targetX, targetY, isLeader }
+let dragGroup = []; // Массив объектов для группы { el, currentX, currentY, targetX, targetY, isLeader, offsetX, offsetY }
 let isDragging = false;
 let animationFrameId = null;
+
+// Стартовая позиция клика
+let startX = 0;
+let startY = 0;
 
 // Координаты мыши относительно экрана
 let mouseX = 0;
@@ -27,7 +31,7 @@ function initMatrix() {
     grid.innerHTML = '';
     cells = [];
     removedCount = 0;
-    binProgress = [0, 0, 0, 0, 0];
+    binProgress = Array(5).fill(0); // Сброс прогресса коробок при старте
     predefinedGroups = {};
 
     // 1. Создаем элементы в сетке
@@ -83,13 +87,13 @@ function getAttachedGroup(centerCell) {
     // Добавляем лидера
     group.push({
         el: centerCell,
-        startX: leaderCenterX,
-        startY: leaderCenterY,
         currentX: 0,
         currentY: 0,
         targetX: 0,
         targetY: 0,
-        isLeader: true
+        isLeader: true,
+        offsetX: 0,
+        offsetY: 0
     });
 
     // Извлекаем из памяти сохраненных соседей для этого числа
@@ -106,14 +110,12 @@ function getAttachedGroup(centerCell) {
 
             group.push({
                 el: cell,
-                startX: cellCenterX,
-                startY: cellCenterY,
                 currentX: 0,
                 currentY: 0,
                 targetX: 0,
                 targetY: 0,
                 isLeader: false,
-                // Исходное смещение соседа относительно лидера в сетке
+                // Исходное смещение соседа относительно лидера в пикселях экрана
                 offsetX: cellCenterX - leaderCenterX,
                 offsetY: cellCenterY - leaderCenterY
             });
@@ -132,10 +134,13 @@ function onPointerDown(e) {
     isDragging = true;
     draggedElement.setPointerCapture(e.pointerId);
 
+    // Запоминаем стартовую позицию курсора при клике
+    startX = e.clientX;
+    startY = e.clientY;
     mouseX = e.clientX;
     mouseY = e.clientY;
 
-    // Собираем группу (она всегда будет одинаковой для этого числа!)
+    // Собираем группу
     dragGroup = getAttachedGroup(draggedElement);
 
     dragGroup.forEach(item => {
@@ -166,30 +171,33 @@ function updateDragAnimation() {
 
     const leader = dragGroup.find(item => item.isLeader);
 
+    // Вычисляем чистый сдвиг мыши от точки клика
+    leader.targetX = mouseX - startX;
+    leader.targetY = mouseY - startY;
+
+    // Мягкое сглаживание движения лидера за курсором (LERP)
+    leader.currentX += (leader.targetX - leader.currentX) * 0.35;
+    leader.currentY += (leader.targetY - leader.currentY) * 0.35;
+
     dragGroup.forEach(item => {
         if (item.isLeader) {
-            item.targetX = mouseX - item.startX;
-            item.targetY = mouseY - item.startY;
-
-            // Мягкое следование лидера за курсором
-            item.currentX += (item.targetX - item.currentX) * 0.4;
-            item.currentY += (item.targetY - item.currentY) * 0.4;
-
-            item.el.style.transform = `translate(${item.currentX}px, ${item.currentY}px) scale(1.6)`;
+            // Лидер просто смещается на дельту движения мыши
+            item.el.style.transform = `translate(${item.currentX}px, ${item.currentY}px)`;
         } else {
             // ЭФФЕКТ ПРИТЯЖЕНИЯ И ЗАПАЗДЫВАНИЯ:
-            // Умножаем offsetX и offsetY на коэффициент меньше 1 (например, 0.5),
-            // чтобы соседи не разлетались, а слегка стягивались к центру пучка при таскании.
-            const compressionFactor = 0.5;
+            // compressionFactor = 0.4 означает, что цифры притянутся на 60% ближе к центру клика.
+            // Если поставить 1.0 — они останутся строго на своих старых позициях относительно лидера.
+            const compressionFactor = 0.4;
 
+            // Целевая точка соседа: текущая дельта лидера + сжатое смещение ячейки
             item.targetX = leader.currentX + (item.offsetX * compressionFactor);
             item.targetY = leader.currentY + (item.offsetY * compressionFactor);
 
-            // Плавное догоняние (LERP)
+            // Плавное догоняние (эффект вязкого шлейфа)
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
 
-            item.el.style.transform = `translate(${item.currentX}px, ${item.currentY}px) scale(1.2)`;
+            item.el.style.transform = `translate(${item.currentX}px, ${item.currentY}px)`;
         }
     });
 
