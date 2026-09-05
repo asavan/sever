@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumon OS - Macrodata Refinement</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="crt-monitor">
+        <div class="screen-bezel">
+            <div class="screen">
+                <!-- Эффекты старого ЭЛТ монитора -->
+                <div class="crt-effects"></div>
+
+                <!-- Верхняя панель интерфейса -->
+                <header class="top-bar">
+                    <div class="file-name">Siena</div>
+                    <div class="progress-total">
+                        <span id="total-percent">0%</span> Complete
+                    </div>
+                    <div class="logo">LUMON</div>
+                </header>
+
+                <!-- Основное поле с матрицей чисел -->
+                <main class="matrix-container" id="matrix-container">
+                    <div class="matrix-grid" id="matrix-grid"></div>
+                </main>
+
+                <!-- Нижняя панель с 5 коробками (Bins) -->
+                <footer class="bottom-bar">
+                    <div class="bins-container">
+                        <div class="bin" data-bin="1">
+                            <div class="bin-title">01</div>
+                            <div class="bin-progress-bar"><div class="fill" id="fill-1"></div></div>
+                            <div class="bin-percent" id="percent-1">0%</div>
+                        </div>
+                        <div class="bin" data-bin="2">
+                            <div class="bin-title">02</div>
+                            <div class="bin-progress-bar"><div class="fill" id="fill-2"></div></div>
+                            <div class="bin-percent" id="percent-2">0%</div>
+                        </div>
+                        <div class="bin" data-bin="3">
+                            <div class="bin-title">03</div>
+                            <div class="bin-progress-bar"><div class="fill" id="fill-3"></div></div>
+                            <div class="bin-percent" id="percent-3">0%</div>
+                        </div>
+                        <div class="bin" data-bin="4">
+                            <div class="bin-title">04</div>
+                            <div class="bin-progress-bar"><div class="fill" id="fill-4"></div></div>
+                            <div class="bin-percent" id="percent-4">0%</div>
+                        </div>
+                        <div class="bin" data-bin="5">
+                            <div class="bin-title">05</div>
+                            <div class="bin-progress-bar"><div class="fill" id="fill-5"></div></div>
+                            <div class="bin-percent" id="percent-5">0%</div>
+                        </div>
+                    </div>
+                    <div class="system-codes">0x137D58 : 0x09BCB1</div>
+                </footer>
+
+                <!-- Экран победы -->
+                <div class="win-screen" id="win-screen">
+                    <h1>MDR Project Complete</h1>
+                    <p>Поздравляем, отдел обработки макроданных выполнил норму!</p>
+                    <button onclick="location.reload()">Очистить новый файл</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
