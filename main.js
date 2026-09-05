@@ -365,21 +365,38 @@ function updateDragAnimation() {
     const screenEl = document.querySelector('.screen');
     const screenRect = screenEl.getBoundingClientRect();
 
-    // 2. БЛОКИРУЕМ КУРСОР МЫШИ ВНУТРИ ЭКРАНА С ЗАПАСОМ, ЧТОБЫ ОН ВСЕГДА ДОХОДИЛ ДО КРАЯ
+    // 2. РАССЧИТЫВАЕМ РЕАЛЬНЫЙ РАДИУС ЦИФРЫ НА ТЕКУЩЕМ ЗУМЕ
+    // Извлекаем числовое значение шрифта (например, из "24px" получаем 24)
+    const currentFontSizeStr = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
+    const baseFontSize = parseInt(currentFontSizeStr) || 14;
+
+    // С учетом scale(1.4) для лидера, его реальный визуальный размер на экране:
+    const visualLeaderWidth = baseFontSize * 1.4;
+    const visualLeaderHeight = baseFontSize * 1.4;
+
+    // "Радиус" лидера — расстояние от его центра (курсора) до его краев
+    const radiusX = visualLeaderWidth / 2;
+    const radiusY = visualLeaderHeight / 2;
+
+    // 3. БЛОКИРУЕМ ТОЧКУ КУРСОРA (ЦЕНТР ЦИФРЫ) С УЧЕТОМ РАДИУСА ЛИДЕРА
     let clampedMouseX = mouseX;
     let clampedMouseY = mouseY;
 
-    if (clampedMouseX < screenRect.left) clampedMouseX = screenRect.left;
-    if (clampedMouseX > screenRect.right) clampedMouseX = screenRect.right;
+    // Лево / Право: Курсор не может подойти к стене ближе, чем на свой радиус
+    if (clampedMouseX < screenRect.left + radiusX) clampedMouseX = screenRect.left + radiusX;
+    if (clampedMouseX > screenRect.right - radiusX) clampedMouseX = screenRect.right - radiusX;
 
-    if (clampedMouseY < screenRect.top) clampedMouseY = screenRect.top;
+    // Верх: Макушка лидера намертво упрется в бирюзовую линию тулбара
+    if (clampedMouseY < screenRect.top + radiusY) clampedMouseY = screenRect.top + radiusY;
+
+    // Низ: Позволяем курсору опускаться до самого края экрана, чтобы цифра заходила глубоко в коробки
     if (clampedMouseY > screenRect.bottom) clampedMouseY = screenRect.bottom;
 
     const leader = dragGroup.find(item => item.isLeader);
 
-    // 3. Вычисляем сдвиг лидера на основе заблокированного курсора
+    // 4. Вычисляем сдвиг лидера на основе ОГРАНИЧЕННОГО курсора
     leader.targetX = clampedMouseX - startX;
-    leader.targetY = mouseY - startY; // По вертикали (Y) даем полную свободу для захода в коробки
+    leader.targetY = clampedMouseY - startY;
 
     leader.currentX += (leader.targetX - leader.currentX) * 0.35;
     leader.currentY += (leader.targetY - leader.currentY) * 0.35;
@@ -387,52 +404,39 @@ function updateDragAnimation() {
     dragGroup.forEach(item => {
         if (!item.phantomEl) return;
 
-        let idealX = 0;
-        let idealY = 0;
+        let finalTranslateX = 0;
+        let finalTranslateY = 0;
 
-        // Вычисляем идеальное положение фантома на экране в пикселях
         if (item.isLeader) {
-            idealX = item.phantomStartX + leader.currentX;
-            idealY = item.phantomStartY + leader.currentY;
+            finalTranslateX = leader.currentX;
+            finalTranslateY = leader.currentY;
         } else {
             const compressionFactor = 0.6;
+            // Физика притяжения соседей в кучку
             item.targetX = leader.currentX + (item.gridOffsetX * (compressionFactor - 1));
             item.targetY = leader.currentY + (item.gridOffsetY * (compressionFactor - 1));
 
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
 
-            idealX = item.phantomStartX + item.currentX;
-            idealY = item.phantomStartY + item.currentY;
+            finalTranslateX = item.currentX;
+            finalTranslateY = item.currentY;
+
+            // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА ДЛЯ СОСЕДЕЙ:
+            // Если сосед по инерции пытается вылететь за Лево или Верх монитора — поджимаем его
+            const neighborRect = item.phantomEl.getBoundingClientRect();
+            const nFinalX = item.phantomStartX + finalTranslateX;
+            const nFinalY = item.phantomStartY + finalTranslateY;
+
+            if (nFinalX < screenRect.left) {
+                finalTranslateX = screenRect.left - item.phantomStartX;
+            }
+            if (nFinalY < screenRect.top) {
+                finalTranslateY = screenRect.top - item.phantomStartY;
+            }
         }
 
-        // 4. УМНЫЙ АДАПТИВНЫЙ CLAMP (Разрешаем вылет ровно на 50% от текущего размера фантома)
-        const pRect = item.phantomEl.getBoundingClientRect();
-        const allowedOutX = pRect.width / 2;
-        const allowedOutY = pRect.height / 2;
-
-        // Ограничение Лево / Право
-        if (idealX + allowedOutX < screenRect.left) {
-            idealX = screenRect.left - allowedOutX;
-        }
-        if (idealX + pRect.width - allowedOutX > screenRect.right) {
-            idealX = screenRect.right - pRect.width + allowedOutX;
-        }
-
-        // Ограничение Верх / Низ (для верха блокируем жестко, для низа даем зайти на коробку)
-        if (idealY + allowedOutY < screenRect.top) {
-            idealY = screenRect.top - allowedOutY;
-        }
-        if (idealY + pRect.height - allowedOutY > screenRect.bottom) {
-            // Позволяем цифре опуститься чуть глубже в коробку на большом зуме
-            idealY = screenRect.bottom - pRect.height + allowedOutY;
-        }
-
-        // 5. Переводим ограниченные пиксели обратно в дельту translate для CSS
-        const finalTranslateX = idealX - item.phantomStartX;
-        const finalTranslateY = idealY - item.phantomStartY;
-
-        // Отрисовываем фантомы
+        // 5. Отрисовываем фантомы через чистый, выверенный сдвиг
         if (item.isLeader) {
             item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px) scale(1.4)";
         } else {
@@ -442,6 +446,7 @@ function updateDragAnimation() {
 
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
+
 
 
 
