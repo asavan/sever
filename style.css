@@ -250,3 +250,26 @@ body {
     color: #011625;
     box-shadow: 0 0 20px #4df3ff;
 }
+
+.num-cell:not(.dragging):not(.drag-group):hover {
+    transform: scale(1.6);
+    color: #4df3ff;
+    text-shadow: 0 0 8px #4df3ff;
+    z-index: 5;
+}
+
+/* Состояния перетаскивания (жестко отключаем CSS-анимации во время JS-движения) */
+.num-cell.dragging {
+    transition: none !important;
+    color: #ffffff !important;
+    text-shadow: 0 0 12px #4df3ff, 0 0 20px #4df3ff;
+    z-index: 100;
+    cursor: grabbing;
+}
+
+.num-cell.drag-group {
+    transition: none !important;
+    color: #8be4ff;
+    text-shadow: 0 0 6px #4df3ff;
+    z-index: 90;
+}

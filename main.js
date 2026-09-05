@@ -7,23 +7,21 @@ const totalPercentEl = document.getElementById('total-percent');
 const winScreen = document.getElementById('win-screen');
 
 let removedCount = 0;
-let binProgress = Array(5).fill(0); // Создает массив из 5 нулей без использования скобок [ ]
+let binProgress = Array(5).fill(0);
 let cells = [];
 
-// Карта постоянных связей: для каждого индекса ячейки сохраняем массив индексов её "прилипал"
+// Карта постоянных связей
 let predefinedGroups = {};
 
-// Переменные состояния мыши и Drag&Drop
+// Состояние Drag&Drop
 let draggedElement = null;
-let dragGroup = []; // Массив объектов для группы { el, currentX, currentY, targetX, targetY, isLeader, offsetX, offsetY }
+let dragGroup = [];
 let isDragging = false;
 let animationFrameId = null;
 
-// Стартовая позиция клика
+// Стартовая позиция курсора и текущие координаты
 let startX = 0;
 let startY = 0;
-
-// Координаты мыши относительно экрана
 let mouseX = 0;
 let mouseY = 0;
 
@@ -31,10 +29,9 @@ function initMatrix() {
     grid.innerHTML = '';
     cells = [];
     removedCount = 0;
-    binProgress = Array(5).fill(0); // Сброс прогресса коробок при старте
+    binProgress = Array(5).fill(0);
     predefinedGroups = {};
 
-    // 1. Создаем элементы в сетке
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
             const cell = document.createElement('div');
@@ -42,7 +39,7 @@ function initMatrix() {
             cell.textContent = Math.floor(Math.random() * 10);
             cell.dataset.row = r;
             cell.dataset.col = c;
-            cell.dataset.index = r * COLS + c; // уникальный индекс
+            cell.dataset.index = r * COLS + c;
 
             grid.appendChild(cell);
             cells.push(cell);
@@ -51,7 +48,7 @@ function initMatrix() {
         }
     }
 
-    // 2. СРАЗУ ГЕНЕРИРУЕМ И ЗАПОМИНАЕМ СВЯЗИ ДЛЯ ВСЕХ ЧИСЕЛ (Один раз на всю игру)
+    // Генерируем постоянные связи
     cells.forEach(cell => {
         const index = parseInt(cell.dataset.index);
         const centerRow = parseInt(cell.dataset.row);
@@ -63,26 +60,20 @@ function initMatrix() {
             const nr = parseInt(neighbor.dataset.row);
             const nc = parseInt(neighbor.dataset.col);
 
-            // Если это сосед в радиусе 1 клетки
             if (Math.abs(nr - centerRow) <= 1 && Math.abs(nc - centerCol) <= 1) {
-                // Шанс 45%, что этот сосед навсегда закрепится за этим числом
                 if (Math.random() < 0.45) {
                     attachedIndices.push(parseInt(neighbor.dataset.index));
                 }
             }
         });
-
-        // Сохраняем группу для этой ячейки
         predefinedGroups[index] = attachedIndices;
     });
 }
 
-// Получение группы на основе ЗАПОМНЕННЫХ связей
 function getAttachedGroup(centerCell) {
     const group = [];
-    const leaderRect = centerCell.getBoundingClientRect();
-    const leaderCenterX = leaderRect.left + leaderRect.width / 2;
-    const leaderCenterY = leaderRect.top + leaderRect.height / 2;
+    const leaderRow = parseInt(centerCell.dataset.row);
+    const leaderCol = parseInt(centerCell.dataset.col);
 
     // Добавляем лидера
     group.push({
@@ -92,21 +83,22 @@ function getAttachedGroup(centerCell) {
         targetX: 0,
         targetY: 0,
         isLeader: true,
-        offsetX: 0,
-        offsetY: 0
+        gridOffsetX: 0,
+        gridOffsetY: 0
     });
 
-    // Извлекаем из памяти сохраненных соседей для этого числа
     const leaderIndex = parseInt(centerCell.dataset.index);
     const savedNeighborIndices = predefinedGroups[leaderIndex] || [];
 
+    // Примерный размер одной ячейки в пикселях для создания правильного масштаба смещения
+    const cellWidth = centerCell.offsetWidth || 30;
+    const cellHeight = centerCell.offsetHeight || 30;
+
     savedNeighborIndices.forEach(idx => {
         const cell = cells[idx];
-        // Берем соседа, только если он еще не собран в коробку (видим на экране)
         if (cell && cell.style.visibility !== 'hidden') {
-            const cellRect = cell.getBoundingClientRect();
-            const cellCenterX = cellRect.left + cellRect.width / 2;
-            const cellCenterY = cellRect.top + cellRect.height / 2;
+            const nr = parseInt(cell.dataset.row);
+            const nc = parseInt(cell.dataset.col);
 
             group.push({
                 el: cell,
@@ -115,9 +107,9 @@ function getAttachedGroup(centerCell) {
                 targetX: 0,
                 targetY: 0,
                 isLeader: false,
-                // Исходное смещение соседа относительно лидера в пикселях экрана
-                offsetX: cellCenterX - leaderCenterX,
-                offsetY: cellCenterY - leaderCenterY
+                // Вычисляем смещение строго по разнице строк и колонок в сетке, а не по экрану
+                gridOffsetX: (nc - leaderCol) * cellWidth,
+                gridOffsetY: (nr - leaderRow) * cellHeight
             });
         }
     });
@@ -126,7 +118,7 @@ function getAttachedGroup(centerCell) {
 }
 
 function onPointerDown(e) {
-    if (e.button !== 0) return; // Только ЛКМ
+    if (e.button !== 0) return;
 
     draggedElement = e.currentTarget;
     if (draggedElement.style.visibility === 'hidden') return;
@@ -134,13 +126,11 @@ function onPointerDown(e) {
     isDragging = true;
     draggedElement.setPointerCapture(e.pointerId);
 
-    // Запоминаем стартовую позицию курсора при клике
     startX = e.clientX;
     startY = e.clientY;
     mouseX = e.clientX;
     mouseY = e.clientY;
 
-    // Собираем группу
     dragGroup = getAttachedGroup(draggedElement);
 
     dragGroup.forEach(item => {
@@ -161,11 +151,9 @@ function onPointerMove(e) {
     if (!isDragging) return;
     mouseX = e.clientX;
     mouseY = e.clientY;
-
     checkBinsHover(mouseX, mouseY);
 }
 
-// Физика движения группы с эффектом легкого стягивания к центру
 function updateDragAnimation() {
     if (!isDragging) return;
 
@@ -179,21 +167,24 @@ function updateDragAnimation() {
     leader.currentX += (leader.targetX - leader.currentX) * 0.35;
     leader.currentY += (leader.targetY - leader.currentY) * 0.35;
 
+    // Если мышка еще не сдвинулась с места клика, не ломаем позиционирование
+    if (Math.abs(leader.targetX) < 1 && Math.abs(leader.targetY) < 1) {
+        animationFrameId = requestAnimationFrame(updateDragAnimation);
+        return;
+    }
+
     dragGroup.forEach(item => {
         if (item.isLeader) {
-            // Лидер просто смещается на дельту движения мыши
+            // Лидер плавно смещается за мышью
             item.el.style.transform = `translate(${item.currentX}px, ${item.currentY}px)`;
         } else {
-            // ЭФФЕКТ ПРИТЯЖЕНИЯ И ЗАПАЗДЫВАНИЯ:
-            // compressionFactor = 0.4 означает, что цифры притянутся на 60% ближе к центру клика.
-            // Если поставить 1.0 — они останутся строго на своих старых позициях относительно лидера.
-            const compressionFactor = 0.4;
+            // Коэффициент притяжения: 1.0 — цифры летят строго на своих местах из сетки
+            // 0.5 — немного стягиваются к лидеру в полете
+            const compressionFactor = 1.0;
 
-            // Целевая точка соседа: текущая дельта лидера + сжатое смещение ячейки
-            item.targetX = leader.currentX + (item.offsetX * compressionFactor);
-            item.targetY = leader.currentY + (item.offsetY * compressionFactor);
+            item.targetX = leader.currentX + (item.gridOffsetX * compressionFactor);
+            item.targetY = leader.currentY + (item.gridOffsetY * compressionFactor);
 
-            // Плавное догоняние (эффект вязкого шлейфа)
             item.currentX += (item.targetX - item.currentX) * 0.15;
             item.currentY += (item.targetY - item.currentY) * 0.15;
 
@@ -203,6 +194,7 @@ function updateDragAnimation() {
 
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
+
 
 function checkBinsHover(x, y) {
     const bins = document.querySelectorAll('.bin');
