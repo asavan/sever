@@ -361,17 +361,28 @@ function onPointerDown(e) {
 function updateDragAnimation() {
     if (!isDragging) return;
 
-    const leader = dragGroup.find(item => item.isLeader);
-
-    // 1. Рассчитываем чистую дельту движения мыши от точки старта
-    leader.targetX = mouseX - startX;
-    leader.targetY = mouseY - startY;
-    leader.currentX += (leader.targetX - leader.currentX) * 0.35;
-    leader.currentY += (leader.targetY - leader.currentY) * 0.35;
-
-    // 2. Получаем точные экранные границы рамки монитора
+    // 1. Получаем точные экранные границы рамки монитора
     const screenEl = document.querySelector('.screen');
     const screenRect = screenEl.getBoundingClientRect();
+
+    // 2. БЛОКИРУЕМ КУРСОР МЫШИ ВНУТРИ ЭКРАНА С ЗАПАСОМ, ЧТОБЫ ОН ВСЕГДА ДОХОДИЛ ДО КРАЯ
+    let clampedMouseX = mouseX;
+    let clampedMouseY = mouseY;
+
+    if (clampedMouseX < screenRect.left) clampedMouseX = screenRect.left;
+    if (clampedMouseX > screenRect.right) clampedMouseX = screenRect.right;
+
+    if (clampedMouseY < screenRect.top) clampedMouseY = screenRect.top;
+    if (clampedMouseY > screenRect.bottom) clampedMouseY = screenRect.bottom;
+
+    const leader = dragGroup.find(item => item.isLeader);
+
+    // 3. Вычисляем сдвиг лидера на основе заблокированного курсора
+    leader.targetX = clampedMouseX - startX;
+    leader.targetY = mouseY - startY; // По вертикали (Y) даем полную свободу для захода в коробки
+
+    leader.currentX += (leader.targetX - leader.currentX) * 0.35;
+    leader.currentY += (leader.targetY - leader.currentY) * 0.35;
 
     dragGroup.forEach(item => {
         if (!item.phantomEl) return;
@@ -379,7 +390,7 @@ function updateDragAnimation() {
         let idealX = 0;
         let idealY = 0;
 
-        // Вычисляем, где фантом ДОЛЖЕН оказаться на экране в пикселях
+        // Вычисляем идеальное положение фантома на экране в пикселях
         if (item.isLeader) {
             idealX = item.phantomStartX + leader.currentX;
             idealY = item.phantomStartY + leader.currentY;
@@ -395,23 +406,29 @@ function updateDragAnimation() {
             idealY = item.phantomStartY + item.currentY;
         }
 
-        // 3. ЖЕСТКИЙ ОГРАНИЧИТЕЛЬ КРАЕВ ЭЛТ-МОНИТОРА (CLAMP)
-        // Замеряем физические размеры фантома на экране (с учетом масштаба scale(1.4))
+        // 4. УМНЫЙ АДАПТИВНЫЙ CLAMP (Разрешаем вылет ровно на 50% от текущего размера фантома)
         const pRect = item.phantomEl.getBoundingClientRect();
+        const allowedOutX = pRect.width / 2;
+        const allowedOutY = pRect.height / 2;
 
-        // Не даем левому и верхнему краю уйти меньше левой/верхней рамки
-        if (idealX < screenRect.left) idealX = screenRect.left;
-        if (idealY < screenRect.top) idealY = screenRect.top;
-
-        // Не даем правому и нижнему краю вылезти дальше правой/нижней рамки
-        if (idealX + pRect.width > screenRect.right) {
-            idealX = screenRect.right - pRect.width;
+        // Ограничение Лево / Право
+        if (idealX + allowedOutX < screenRect.left) {
+            idealX = screenRect.left - allowedOutX;
         }
-        if (idealY + pRect.height > screenRect.bottom) {
-            idealY = screenRect.bottom - pRect.height;
+        if (idealX + pRect.width - allowedOutX > screenRect.right) {
+            idealX = screenRect.right - pRect.width + allowedOutX;
         }
 
-        // 4. Переводим ограниченные экранные пиксели обратно в дельту translate для CSS
+        // Ограничение Верх / Низ (для верха блокируем жестко, для низа даем зайти на коробку)
+        if (idealY + allowedOutY < screenRect.top) {
+            idealY = screenRect.top - allowedOutY;
+        }
+        if (idealY + pRect.height - allowedOutY > screenRect.bottom) {
+            // Позволяем цифре опуститься чуть глубже в коробку на большом зуме
+            idealY = screenRect.bottom - pRect.height + allowedOutY;
+        }
+
+        // 5. Переводим ограниченные пиксели обратно в дельту translate для CSS
         const finalTranslateX = idealX - item.phantomStartX;
         const finalTranslateY = idealY - item.phantomStartY;
 
@@ -425,6 +442,7 @@ function updateDragAnimation() {
 
     animationFrameId = requestAnimationFrame(updateDragAnimation);
 }
+
 
 
 
