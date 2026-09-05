@@ -413,10 +413,27 @@ function updateBinProgress(binIndex, count) {
     const totalPercent = Math.min(100, Math.floor((removedCount / TOTAL_NUMBERS) * 100));
     totalPercentEl.textContent = totalPercent + "%";
 
+    // Условие полной очистки экрана (победа)
     if (removedCount >= TOTAL_NUMBERS) {
+        // Принудительно включаем музыку Siena Project Complete, если она спала
+        const bgMusic = document.getElementById('bg-music');
+        const musicToggle = document.getElementById('music-toggle');
+
+        if (bgMusic && bgMusic.paused) {
+            bgMusic.play().then(() => {
+                if (musicToggle) {
+                    musicToggle.style.backgroundColor = '#4df3ff';
+                    musicToggle.style.color = '#011625';
+                    musicToggle.style.boxShadow = '0 0 15px #4df3ff';
+                }
+            }).catch(err => console.log("Ошибка автоплея при победе:", err));
+        }
+
+        // Показываем экран триумфа
         winScreen.classList.add('active');
     }
 }
+
 
 window.addEventListener('resize', handleResize);
 
