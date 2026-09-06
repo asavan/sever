@@ -1,0 +1,33 @@
+{
+  "name": "sever",
+  "version": "0.0.1",
+  "author": "Alex Sav",
+  "description": "sever game",
+  "private": true,
+  "main": "index.js",
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "start": "webpack serve --config webpack_configs/webpack.config.js --mode development",
+    "android": "webpack --config webpack_configs/android.webpack.config.js --mode production",
+    "build": "webpack --config webpack_configs/production.webpack.config.js --mode production",
+    "style": "npx eslint . -c linters/eslint.config.js",
+    "style:fix": "npx eslint . -c linters/eslint.config.js --fix",
+    "style2": "npx stylelint --config linters/stylelint.config.js \"src/**/*.css\"",
+    "style2:fix": "npx stylelint --config linters/stylelint.config.js \"src/**/*.css\" --fix",
+    "style3": "npx oxlint -D all -A no-console -A max-params -A prefer-add-event-listener -A no-useless-undefined -A no-undefined -A no-async-await -A func-names -A default-case -A filename-case -A no-lonely-if -A sort-keys -A no-magic-numbers -A no-plusplus -A prefer-global-this -A id-length -A yoda -A func-style -A switch-case-braces -A max-lines-per-function -A init-declarations -A prefer-set-has -A no-continue -A prefer-destructuring -A prefer-template -A no-null -A catch-error-name -A sort-imports -A no-rest-spread-properties -A no-eq-null -A no-optional-chaining -A no-await-in-loop -A no-negated-condition -A new-cap -A no-alert -A eqeqeq --threads=1 --deny-warnings  --ignore-pattern=src/js/lib/* ./src",
+    "test": "node --test --test-reporter dot",
+    "test:verbose": "node --test",
+    "test:coverage": "node --experimental-test-coverage --test",
+    "updates": "npx ncu",
+    "updates:fix": "npx ncu -u && npm install && npm audit fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asavan/sever.git"
+  },
+  "homepage": "https://asavan.github.io/sever/",
+  "devDependencies": {
+    "devdeps": "github:asavan/dev-deps#v0.2.0"
+  }
+}
