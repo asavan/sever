@@ -4,11 +4,11 @@ export default function game(window, document) {
     const ROWS = 12;
     let TOTAL_NUMBERS = COLS * ROWS;
 
-    const monitor = document.getElementById('monitor-container');
-    const container = document.getElementById('matrix-container');
-    const grid = document.getElementById('matrix-grid');
-    const totalPercentEl = document.getElementById('total-percent');
-    const winScreen = document.getElementById('win-screen');
+    const monitor = document.getElementById("monitor-container");
+    const container = document.getElementById("matrix-container");
+    const grid = document.getElementById("matrix-grid");
+    const totalPercentEl = document.getElementById("total-percent");
+    const winScreen = document.getElementById("win-screen");
 
     let removedCount = 0;
     let binProgress = Array(5).fill(0);
@@ -30,7 +30,7 @@ export default function game(window, document) {
     let mouseX = 0;
     let mouseY = 0;
 
-    let activeTouches = [];
+    // const activeTouches = [];
     let initialPinchDistance = 0;
     let initialZoomOnPinchStart = 0;
 
@@ -40,17 +40,17 @@ export default function game(window, document) {
         if (isPortrait) {
             COLS = 14;
             BASE_COLS = 14;
-            monitor.classList.add('is-portrait');
+            monitor.classList.add("is-portrait");
         } else {
             COLS = 28;
             BASE_COLS = 28;
-            monitor.classList.remove('is-portrait');
+            monitor.classList.remove("is-portrait");
         }
 
         setupZoomLevels();
 
         TOTAL_NUMBERS = COLS * ROWS;
-        grid.innerHTML = '';
+        grid.innerHTML = "";
         virtualMatrix = [];
         removedCount = 0;
         binProgress = Array(5).fill(0);
@@ -69,11 +69,13 @@ export default function game(window, document) {
             });
         }
 
-        for (let item of virtualMatrix) {
-            let attached = [];
-            for (let n of virtualMatrix) {
+        for (const item of virtualMatrix) {
+            const attached = [];
+            for (const n of virtualMatrix) {
                 if (n.index !== item.index && Math.abs(n.row - item.row) <= 1 && Math.abs(n.col - item.col) <= 1) {
-                    if (Math.random() < 0.45) attached.push(n.index);
+                    if (Math.random() < 0.45) {
+                        attached.push(n.index);
+                    }
                 }
             }
             predefinedGroups[item.index] = attached;
@@ -81,15 +83,15 @@ export default function game(window, document) {
 
         renderViewport();
 
-        container.removeEventListener('wheel', onContainerWheel);
-        container.addEventListener('wheel', onContainerWheel, {passive: false});
+        container.removeEventListener("wheel", onContainerWheel);
+        container.addEventListener("wheel", onContainerWheel, {passive: false});
 
-        container.removeEventListener('touchstart', onContainerTouchStart);
-        container.removeEventListener('touchmove', onContainerTouchMove);
-        container.addEventListener('touchstart', onContainerTouchStart, {passive: true});
-        container.addEventListener('touchmove', onContainerTouchMove, {passive: false});
-        container.addEventListener('touchend', onContainerTouchEnd);
-        container.addEventListener('touchcancel', onContainerTouchEnd);
+        container.removeEventListener("touchstart", onContainerTouchStart);
+        container.removeEventListener("touchmove", onContainerTouchMove);
+        container.addEventListener("touchstart", onContainerTouchStart, {passive: true});
+        container.addEventListener("touchmove", onContainerTouchMove, {passive: false});
+        container.addEventListener("touchend", onContainerTouchEnd);
+        container.addEventListener("touchcancel", onContainerTouchEnd);
     }
 
 
@@ -112,20 +114,20 @@ export default function game(window, document) {
     function handleResize() {
         const isPortrait = window.innerHeight > window.innerWidth;
         if (isPortrait) {
-            monitor.classList.add('is-portrait');
+            monitor.classList.add("is-portrait");
         } else {
-            monitor.classList.remove('is-portrait');
+            monitor.classList.remove("is-portrait");
         }
         renderViewport();
     }
 
     function renderViewport() {
-        grid.innerHTML = '';
+        grid.innerHTML = "";
         const cfg = ZOOM_LEVELS.at(currentZoomIndex);
 
-        grid.style.setProperty('--view-cols', cfg.viewCols);
-        grid.style.setProperty('--view-rows', cfg.viewRows);
-        grid.style.setProperty('--cell-font-size', cfg.fontSize);
+        grid.style.setProperty("--view-cols", cfg.viewCols);
+        grid.style.setProperty("--view-rows", cfg.viewRows);
+        grid.style.setProperty("--cell-font-size", cfg.fontSize);
 
         cameraColOffset = Math.max(0, Math.min(COLS - cfg.viewCols, cameraColOffset));
         cameraRowOffset = Math.max(0, Math.min(ROWS - cfg.viewRows, cameraRowOffset));
@@ -140,8 +142,8 @@ export default function game(window, document) {
                     const vItem = virtualMatrix.at(vIdx);
 
                     if (vItem && vItem.visible) {
-                        const cell = document.createElement('div');
-                        cell.classList.add('num-cell');
+                        const cell = document.createElement("div");
+                        cell.classList.add("num-cell");
                         cell.textContent = vItem.value;
                         cell.dataset.index = vItem.index;
                         cell.dataset.row = vItem.row;
@@ -150,12 +152,12 @@ export default function game(window, document) {
                         cell.id = "cell-id-" + vItem.index;
 
                         grid.appendChild(cell);
-                        cell.addEventListener('pointerdown', onPointerDown);
+                        cell.addEventListener("pointerdown", onPointerDown);
                     } else {
-                        grid.appendChild(document.createElement('div'));
+                        grid.appendChild(document.createElement("div"));
                     }
                 } else {
-                    grid.appendChild(document.createElement('div'));
+                    grid.appendChild(document.createElement("div"));
                 }
             }
         }
@@ -168,8 +170,8 @@ export default function game(window, document) {
         const relX = (focusCol - cameraColOffset) / oldCfg.viewCols;
         const relY = (focusRow - cameraRowOffset) / oldCfg.viewRows;
 
-        let newColOffset = Math.round(focusCol - (relX * newCfg.viewCols));
-        let newRowOffset = Math.round(focusRow - (relY * newCfg.viewRows));
+        const newColOffset = Math.round(focusCol - (relX * newCfg.viewCols));
+        const newRowOffset = Math.round(focusRow - (relY * newCfg.viewRows));
 
         cameraColOffset = Math.max(0, Math.min(COLS - newCfg.viewCols, newColOffset));
         cameraRowOffset = Math.max(0, Math.min(ROWS - newCfg.viewRows, newRowOffset));
@@ -179,9 +181,11 @@ export default function game(window, document) {
 
     function onContainerWheel(e) {
         e.preventDefault();
-        if (isDragging) return;
+        if (isDragging) {
+            return;
+        }
 
-        const targetCell = e.target.closest('.num-cell');
+        const targetCell = e.target.closest(".num-cell");
         let focusRow = cameraRowOffset + Math.floor(ZOOM_LEVELS.at(currentZoomIndex).viewRows / 2);
         let focusCol = cameraColOffset + Math.floor(ZOOM_LEVELS.at(currentZoomIndex).viewCols / 2);
 
@@ -192,9 +196,13 @@ export default function game(window, document) {
 
         const oldIndex = currentZoomIndex;
         if (e.deltaY < 0) {
-            if (currentZoomIndex < ZOOM_LEVELS.length - 1) currentZoomIndex++;
+            if (currentZoomIndex < ZOOM_LEVELS.length - 1) {
+                currentZoomIndex++;
+            }
         } else {
-            if (currentZoomIndex > 0) currentZoomIndex--;
+            if (currentZoomIndex > 0) {
+                currentZoomIndex--;
+            }
         }
 
         if (oldIndex !== currentZoomIndex) {
@@ -204,7 +212,9 @@ export default function game(window, document) {
 
     function onContainerTouchStart(e) {
         if (e.touches.length === 2) {
-            if (isDragging) cancelDrag();
+            if (isDragging) {
+                cancelDrag();
+            }
             const t1 = e.touches.item(0);
             const t2 = e.touches.item(1);
             if (t1 && t2) {
@@ -219,15 +229,23 @@ export default function game(window, document) {
             e.preventDefault();
             const t1 = e.touches.item(0);
             const t2 = e.touches.item(1);
-            if (!t1 || !t2) return;
+            if (!t1 || !t2) {
+                return;
+            }
 
             const currentDistance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
             const ratio = currentDistance / initialPinchDistance;
             let targetIndex = initialZoomOnPinchStart;
 
-            if (ratio > 1.35) targetIndex = Math.min(ZOOM_LEVELS.length - 1, initialZoomOnPinchStart + 1);
-            if (ratio > 1.9) targetIndex = ZOOM_LEVELS.length - 1;
-            if (ratio < 0.75) targetIndex = Math.max(0, initialZoomOnPinchStart - 1);
+            if (ratio > 1.35) {
+                targetIndex = Math.min(ZOOM_LEVELS.length - 1, initialZoomOnPinchStart + 1);
+            }
+            if (ratio > 1.9) {
+                targetIndex = ZOOM_LEVELS.length - 1;
+            }
+            if (ratio < 0.75) {
+                targetIndex = Math.max(0, initialZoomOnPinchStart - 1);
+            }
 
             if (targetIndex !== currentZoomIndex) {
                 const oldIdx = currentZoomIndex;
@@ -238,8 +256,8 @@ export default function game(window, document) {
                 const midY = (t1.clientY + t2.clientY) / 2 - rect.top;
 
                 const currentCfg = ZOOM_LEVELS.at(oldIdx);
-                let focusCol = cameraColOffset + Math.floor((midX / rect.width) * currentCfg.viewCols);
-                let focusRow = cameraRowOffset + Math.floor((midY / rect.height) * currentCfg.viewRows);
+                const focusCol = cameraColOffset + Math.floor((midX / rect.width) * currentCfg.viewCols);
+                const focusRow = cameraRowOffset + Math.floor((midY / rect.height) * currentCfg.viewRows);
 
                 updateCameraFocus(focusRow, focusCol, oldIdx, currentZoomIndex);
             }
@@ -285,11 +303,17 @@ export default function game(window, document) {
     }
 
     function onPointerDown(e) {
-        if (e.button !== 0 && e.pointerType === 'mouse') return;
-        if (!e.isPrimary || isDragging) return;
+        if (e.button !== 0 && e.pointerType === "mouse") {
+            return;
+        }
+        if (!e.isPrimary || isDragging) {
+            return;
+        }
 
         draggedElement = e.currentTarget;
-        if (draggedElement.style.visibility === "hidden") return;
+        if (draggedElement.style.visibility === "hidden") {
+            return;
+        }
 
         isDragging = true;
         draggedElement.setPointerCapture(e.pointerId);
@@ -301,22 +325,24 @@ export default function game(window, document) {
 
         const rawGroup = getAttachedGroup(draggedElement);
         const currentFontSizeStr = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
-        document.documentElement.style.setProperty('--phantom-font-size', currentFontSizeStr);
+        document.documentElement.style.setProperty("--phantom-font-size", currentFontSizeStr);
 
         const leaderRect = draggedElement.getBoundingClientRect();
 
         dragGroup = rawGroup.map(item => {
-            if (item.el) item.el.style.opacity = "0.0";
+            if (item.el) {
+                item.el.style.opacity = "0.0";
+            }
 
-            const phantom = document.createElement('div');
-            phantom.classList.add('phantom-cell');
-            phantom.classList.add(item.isLeader ? 'leader' : 'follower');
+            const phantom = document.createElement("div");
+            phantom.classList.add("phantom-cell");
+            phantom.classList.add(item.isLeader ? "leader" : "follower");
 
             const vItem = virtualMatrix.at(item.vIdx);
             phantom.textContent = vItem ? vItem.value : "0";
 
-            let pLeft = leaderRect.left + item.gridOffsetX;
-            let pTop = leaderRect.top + item.gridOffsetY;
+            const pLeft = leaderRect.left + item.gridOffsetX;
+            const pTop = leaderRect.top + item.gridOffsetY;
 
             phantom.style.left = pLeft + "px";
             phantom.style.top = pTop + "px";
@@ -334,31 +360,35 @@ export default function game(window, document) {
         });
 
         updateDragAnimation();
-        draggedElement.addEventListener('pointermove', onPointerMove);
-        draggedElement.addEventListener('pointerup', onPointerUp);
-        draggedElement.addEventListener('pointercancel', onPointerUp);
+        draggedElement.addEventListener("pointermove", onPointerMove);
+        draggedElement.addEventListener("pointerup", onPointerUp);
+        draggedElement.addEventListener("pointercancel", onPointerUp);
     }
 
     function onPointerMove(e) {
-        if (!isDragging) return;
+        if (!isDragging) {
+            return;
+        }
         mouseX = e.clientX;
         mouseY = e.clientY;
 
-        const bins = document.querySelectorAll('.bin');
+        const bins = document.querySelectorAll(".bin");
         bins.forEach(bin => {
             const r = bin.getBoundingClientRect();
             if (mouseX >= r.left && mouseX <= r.right && mouseY >= r.top && mouseY <= r.bottom) {
-                bin.classList.add('drag-over');
+                bin.classList.add("drag-over");
             } else {
-                bin.classList.remove('drag-over');
+                bin.classList.remove("drag-over");
             }
         });
     }
 
     function updateDragAnimation() {
-        if (!isDragging) return;
+        if (!isDragging) {
+            return;
+        }
 
-        const screenEl = document.querySelector('.screen');
+        const screenEl = document.querySelector(".screen");
         const screenRect = screenEl.getBoundingClientRect();
 
         const currentFontSizeStr = ZOOM_LEVELS.at(currentZoomIndex).fontSize;
@@ -372,10 +402,18 @@ export default function game(window, document) {
         let clampedMouseX = mouseX;
         let clampedMouseY = mouseY;
 
-        if (clampedMouseX < screenRect.left + radiusX) clampedMouseX = screenRect.left + radiusX;
-        if (clampedMouseX > screenRect.right - radiusX) clampedMouseX = screenRect.right - radiusX;
-        if (clampedMouseY < screenRect.top + radiusY) clampedMouseY = screenRect.top + radiusY;
-        if (clampedMouseY > screenRect.bottom) clampedMouseY = screenRect.bottom;
+        if (clampedMouseX < screenRect.left + radiusX) {
+            clampedMouseX = screenRect.left + radiusX;
+        }
+        if (clampedMouseX > screenRect.right - radiusX) {
+            clampedMouseX = screenRect.right - radiusX;
+        }
+        if (clampedMouseY < screenRect.top + radiusY) {
+            clampedMouseY = screenRect.top + radiusY;
+        }
+        if (clampedMouseY > screenRect.bottom) {
+            clampedMouseY = screenRect.bottom;
+        }
 
         const leader = dragGroup.find(item => item.isLeader);
 
@@ -385,10 +423,12 @@ export default function game(window, document) {
         leader.currentY += (leader.targetY - leader.currentY) * 0.35;
 
         dragGroup.forEach(item => {
-            if (!item.phantomEl) return;
+            if (!item.phantomEl) {
+                return;
+            }
 
-            let idealTranslateX = 0;
-            let idealTranslateY = 0;
+            let idealTranslateX;
+            let idealTranslateY;
 
             // Восстановленный кусок логики смещений
             if (item.isLeader) {
@@ -414,15 +454,24 @@ export default function game(window, document) {
             const visibleRadiusX = (baseFontSize * currentScale) / 2;
             const visibleRadiusY = (baseFontSize * currentScale) / 2;
 
-            if (finalCenterX - visibleRadiusX < screenRect.left) finalCenterX = screenRect.left + visibleRadiusX;
-            if (finalCenterX + visibleRadiusX > screenRect.right) finalCenterX = screenRect.right - visibleRadiusX;
-            if (finalCenterY - visibleRadiusY < screenRect.top) finalCenterY = screenRect.top + visibleRadiusY;
-            if (finalCenterY > screenRect.bottom) finalCenterY = screenRect.bottom;
+            if (finalCenterX - visibleRadiusX < screenRect.left) {
+                finalCenterX = screenRect.left + visibleRadiusX;
+            }
+            if (finalCenterX + visibleRadiusX > screenRect.right) {
+                finalCenterX = screenRect.right - visibleRadiusX;
+            }
+            if (finalCenterY - visibleRadiusY < screenRect.top) {
+                finalCenterY = screenRect.top + visibleRadiusY;
+            }
+            if (finalCenterY > screenRect.bottom) {
+                finalCenterY = screenRect.bottom;
+            }
 
             const finalTranslateX = (finalCenterX - (cellW / 2)) - item.phantomStartX;
             const finalTranslateY = (finalCenterY - (cellH / 2)) - item.phantomStartY;
 
-            item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px) scale(" + currentScale + ")";
+            item.phantomEl.style.transform = "translate(" + finalTranslateX + "px, " + finalTranslateY + "px) " +
+                "scale(" + currentScale + ")";
         });
 
         animationFrameId = requestAnimationFrame(updateDragAnimation);
@@ -430,26 +479,36 @@ export default function game(window, document) {
 
 
     function onPointerUp(e) {
-        if (!isDragging) return;
+        if (!isDragging) {
+            return;
+        }
         isDragging = false;
         cancelAnimationFrame(animationFrameId);
 
         let droppedInBin = null;
-        const bins = document.querySelectorAll('.bin');
+        const bins = document.querySelectorAll(".bin");
         bins.forEach(bin => {
             const r = bin.getBoundingClientRect();
-            if (mouseX >= r.left && mouseX <= r.right && mouseY >= r.top && mouseY <= r.bottom) droppedInBin = bin;
-            bin.classList.remove('drag-over');
+            if (mouseX >= r.left && mouseX <= r.right && mouseY >= r.top && mouseY <= r.bottom) {
+                droppedInBin = bin;
+            }
+            bin.classList.remove("drag-over");
         });
 
         if (droppedInBin) {
             const binIndex = parseInt(droppedInBin.dataset.bin) - 1;
 
             dragGroup.forEach(item => {
-                if (item.phantomEl) item.phantomEl.remove();
+                if (item.phantomEl) {
+                    item.phantomEl.remove();
+                }
                 const vItem = virtualMatrix.at(item.vIdx);
-                if (vItem) vItem.visible = false;
-                if (item.el) resetElementStyles(item.el);
+                if (vItem) {
+                    vItem.visible = false;
+                }
+                if (item.el) {
+                    resetElementStyles(item.el);
+                }
             });
 
             updateBinProgress(binIndex, dragGroup.length);
@@ -457,21 +516,25 @@ export default function game(window, document) {
         } else {
             dragGroup.forEach(item => {
                 if (item.phantomEl) {
-                    item.phantomEl.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1)';
-                    item.phantomEl.style.transform = 'translate(0px, 0px)';
+                    item.phantomEl.style.transition = "transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1)";
+                    item.phantomEl.style.transform = "translate(0px, 0px)";
                 }
                 setTimeout(() => {
-                    if (item.phantomEl) item.phantomEl.remove();
-                    if (item.el) resetElementStyles(item.el);
+                    if (item.phantomEl) {
+                        item.phantomEl.remove();
+                    }
+                    if (item.el) {
+                        resetElementStyles(item.el);
+                    }
                 }, 300);
             });
         }
 
         if (draggedElement) {
             draggedElement.releasePointerCapture(e.pointerId);
-            draggedElement.removeEventListener('pointermove', onPointerMove);
-            draggedElement.removeEventListener('pointerup', onPointerUp);
-            draggedElement.removeEventListener('pointercancel', onPointerUp);
+            draggedElement.removeEventListener("pointermove", onPointerMove);
+            draggedElement.removeEventListener("pointerup", onPointerUp);
+            draggedElement.removeEventListener("pointercancel", onPointerUp);
         }
         draggedElement = null;
         dragGroup = [];
@@ -481,8 +544,12 @@ export default function game(window, document) {
         isDragging = false;
         cancelAnimationFrame(animationFrameId);
         dragGroup.forEach(item => {
-            if (item.phantomEl) item.phantomEl.remove();
-            if (item.el) resetElementStyles(item.el);
+            if (item.phantomEl) {
+                item.phantomEl.remove();
+            }
+            if (item.el) {
+                resetElementStyles(item.el);
+            }
         });
         draggedElement = null;
         dragGroup = [];
@@ -490,11 +557,11 @@ export default function game(window, document) {
 
     function resetElementStyles(el) {
         el.style.opacity = "";
-        el.classList.remove('dragging', 'drag-group');
-        el.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1)';
-        el.style.transform = '';
+        el.classList.remove("dragging", "drag-group");
+        el.style.transition = "transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1)";
+        el.style.transform = "";
         setTimeout(() => {
-            el.style.transition = '';
+            el.style.transition = "";
         }, 300);
     }
 
@@ -514,51 +581,53 @@ export default function game(window, document) {
         totalPercentEl.textContent = totalPercent + "%";
 
         if (removedCount >= TOTAL_NUMBERS) {
-            const bgMusic = document.getElementById('bg-music');
-            const musicToggle = document.getElementById('music-toggle');
+            const bgMusic = document.getElementById("bg-music");
+            const musicToggle = document.getElementById("music-toggle");
             if (bgMusic && bgMusic.paused) {
                 bgMusic.play().then(() => {
                     if (musicToggle) {
-                        musicToggle.style.backgroundColor = '#4df3ff';
-                        musicToggle.style.color = '#011625';
-                        musicToggle.style.boxShadow = '0 0 15px #4df3ff';
+                        musicToggle.style.backgroundColor = "#4df3ff";
+                        musicToggle.style.color = "#011625";
+                        musicToggle.style.boxShadow = "0 0 15px #4df3ff";
                     }
                 }).catch(err => console.log(err));
             }
-            winScreen.classList.add('active');
+            winScreen.classList.add("active");
         }
     }
 
-    window.addEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
 
     initMatrix();
 
     function initMusicPlayer() {
-        const musicToggle = document.getElementById('music-toggle');
-        const bgMusic = document.getElementById('bg-music');
+        const musicToggle = document.getElementById("music-toggle");
+        const bgMusic = document.getElementById("bg-music");
 
-        if (!musicToggle || !bgMusic) return;
+        if (!musicToggle || !bgMusic) {
+            return;
+        }
 
-        musicToggle.addEventListener('click', () => {
+        musicToggle.addEventListener("click", () => {
             if (bgMusic.paused) {
                 // Запускаем музыку
                 bgMusic.play().then(() => {
-                    musicToggle.style.backgroundColor = '#4df3ff';
-                    musicToggle.style.color = '#011625';
-                    musicToggle.style.boxShadow = '0 0 15px #4df3ff';
+                    musicToggle.style.backgroundColor = "#4df3ff";
+                    musicToggle.style.color = "#011625";
+                    musicToggle.style.boxShadow = "0 0 15px #4df3ff";
                 }).catch(err => {
                     console.log("Браузер заблокировал автовоспроизведение. Нужен ручной клик:", err);
                 });
             } else {
                 // Останавливаем музыку
                 bgMusic.pause();
-                musicToggle.style.backgroundColor = 'transparent';
-                musicToggle.style.color = '#4df3ff';
-                musicToggle.style.boxShadow = 'none';
+                musicToggle.style.backgroundColor = "transparent";
+                musicToggle.style.color = "#4df3ff";
+                musicToggle.style.boxShadow = "none";
             }
         });
     }
 
-// Запускаем плеер после инициализации всего интерфейса
+    // Запускаем плеер после инициализации всего интерфейса
     initMusicPlayer();
 }
