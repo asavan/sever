@@ -32,5 +32,5 @@ export function initMusicPlayer(document) {
 
     return {
         playOrPause
-    }
+    };
 }
