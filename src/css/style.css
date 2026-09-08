@@ -118,10 +118,11 @@ body {
 
 .bottom-bar {
     border-top: 2px solid #00567a;
-    padding: 10px 20px;
+    padding: 30px 20px 10px;
     background-color: #011c2e;
     color: #31a2cc;
     position: relative;
+    overflow: hidden;
     z-index: 10; /* Обычный слой панели */
 }
 
@@ -215,6 +216,7 @@ body {
 }
 
 .bin {
+    position: relative;
     flex: 1;
     border: 2px solid #00567a;
     padding: 4px;
@@ -311,4 +313,48 @@ body {
     background: #4df3ff;
     color: #011625;
     box-shadow: 0 0 20px #4df3ff;
+}
+
+/* Контейнер для крышек */
+.bin-lids {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    display: flex;
+}
+
+.lid {
+    width: 50%;
+    height: 100%;
+    background: #5ce1e6;
+
+    /* Состояние ЗАКРЫТО: делаем тусклой и убираем свечение */
+    opacity: 0.2; /* Измени на 0, если хочешь сделать СОВСЕМ невидимой */
+    box-shadow: none;
+
+    /* Плавный переход для трансформации, прозрачности и свечения */
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+/* Шарниры */
+.lid-left { transform-origin: left center; }
+.lid-right { transform-origin: right center; }
+
+/* Состояние ОТКРЫТО: загорается на полную мощность и активирует свечение */
+.bin.open .lid {
+    opacity: 1;
+    box-shadow: 0 0 8px #5ce1e6;
+}
+
+/* Сами углы поворота при открытии */
+.bin.open .lid-left {
+    transform: rotate(-135deg);
+}
+
+.bin.open .lid-right {
+    transform: rotate(135deg);
 }

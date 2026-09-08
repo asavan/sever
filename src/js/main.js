@@ -351,7 +351,7 @@ export default function game(window, document) {
             phantom.style.width = leaderRect.width + "px";
             phantom.style.height = leaderRect.height + "px";
 
-            document.body.appendChild(phantom);
+            monitor.appendChild(phantom);
 
             return {
                 ...item,
