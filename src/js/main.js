@@ -15,6 +15,7 @@ export default function game(window, document) {
     let removedCount = 0;
     let binProgress = Array(5).fill(0);
     let predefinedGroups = {};
+    let elementGroupsCache = {};
     let virtualMatrix = [];
 
     let ZOOM_LEVELS = [];
@@ -57,6 +58,7 @@ export default function game(window, document) {
         removedCount = 0;
         binProgress = Array(5).fill(0);
         predefinedGroups = {};
+        elementGroupsCache= {};
         currentZoomIndex = 0;
         cameraColOffset = 0;
         cameraRowOffset = 0;
@@ -69,18 +71,6 @@ export default function game(window, document) {
                 value: Math.floor(Math.random() * 10),
                 visible: true
             });
-        }
-
-        for (const item of virtualMatrix) {
-            const attached = [];
-            for (const n of virtualMatrix) {
-                if (n.index !== item.index && Math.abs(n.row - item.row) <= 1 && Math.abs(n.col - item.col) <= 1) {
-                    if (Math.random() < 0.45) {
-                        attached.push(n.index);
-                    }
-                }
-            }
-            predefinedGroups[item.index] = attached;
         }
 
         renderViewport();
@@ -285,7 +275,7 @@ export default function game(window, document) {
             targetX: 0, targetY: 0, isLeader: true, gridOffsetX: 0, gridOffsetY: 0
         });
 
-        const savedNeighborIndices = predefinedGroups[leaderIndex] || [];
+        const savedNeighborIndices = Array.from(getGroupByElementIndex(leaderIndex));
 
         savedNeighborIndices.forEach(idx => {
             const vItem = virtualMatrix.at(idx);
@@ -365,6 +355,82 @@ export default function game(window, document) {
         draggedElement.addEventListener("pointermove", onPointerMove);
         draggedElement.addEventListener("pointerup", onPointerUp);
         draggedElement.addEventListener("pointercancel", onPointerUp);
+    }
+
+    // Вспомогательная функция: проверяет видимость ячейки в виртуальной матрице
+    function isCellStillInMatrix(index) {
+        // Безопасно проверяем объект по индексу в стейте игры
+        const cell = virtualMatrix.at(index);
+        return cell ? cell.visible : false;
+    }
+
+    function getGroupByElementIndex(centerIndex) {
+        // Если сам стартовый элемент уже скрыт (перенесен), группа пустая
+        if (!isCellStillInMatrix(centerIndex)) {
+            return new Set();
+        }
+
+        // 1. ПРОВЕРКА КЭША С ВАЛИДАЦИЕЙ СТЕЙТА
+        if (elementGroupsCache[centerIndex]) {
+            const cachedSet = elementGroupsCache[centerIndex];
+
+            // Оставляем в кэше только те элементы, у которых .visible === true
+            const validIndexes = Array.from(cachedSet).filter(idx => isCellStillInMatrix(idx));
+
+            // Если стартовый элемент всё ещё видим, возвращаем отфильтрованный сет
+            if (validIndexes.includes(centerIndex)) {
+                elementGroupsCache[centerIndex] = new Set(validIndexes);
+                return elementGroupsCache[centerIndex];
+            }
+        }
+
+        // 2. ДИНАМИЧЕСКИЙ РАСЧЕТ (если кэш пуст или инвалидирован)
+        const attached = new Set();
+        attached.add(centerIndex);
+
+        function findNeighbors(currentIndex, depth) {
+            if (depth > 2) {
+                return;
+            } // Строго 2 прохода
+
+            const row = Math.floor(currentIndex / COLS);
+            const col = currentIndex % COLS;
+
+            // 8 направлений смещения
+            const directions = [
+                [-1, -1], [-1, 0], [-1, 1],
+                [ 0, -1], [ 0, 1],
+                [ 1, -1], [ 1, 0], [ 1, 1]
+            ];
+
+            for (const [dRow, dCol] of directions) {
+                const nRow = row + dRow;
+                const nCol = col + dCol;
+
+                // Проверяем границы матрицы
+                if (nRow >= 0 && nRow < ROWS && nCol >= 0 && nCol < COLS) {
+                    const neighborIndex = nRow * COLS + nCol;
+
+                    // Проверяем, что сосед еще не в сете и его .visible === true в стейте
+                    if (!attached.has(neighborIndex) && isCellStillInMatrix(neighborIndex)) {
+                        if (Math.random() < 0.40 / depth) {
+                            attached.add(neighborIndex);
+
+                            // Рекурсивно смотрим соседей соседа (шаг 2)
+                            findNeighbors(neighborIndex, depth + 1);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Запускаем расчет
+        findNeighbors(centerIndex, 1);
+
+        // Сохраняем актуальный результат в кэш
+        elementGroupsCache[centerIndex] = attached;
+
+        return attached;
     }
 
     function onPointerMove(e) {
