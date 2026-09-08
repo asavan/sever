@@ -14,7 +14,6 @@ export default function game(window, document) {
 
     let removedCount = 0;
     let binProgress = Array(5).fill(0);
-    let predefinedGroups = {};
     let elementGroupsCache = {};
     let virtualMatrix = [];
 
@@ -57,7 +56,6 @@ export default function game(window, document) {
         virtualMatrix = [];
         removedCount = 0;
         binProgress = Array(5).fill(0);
-        predefinedGroups = {};
         elementGroupsCache= {};
         currentZoomIndex = 0;
         cameraColOffset = 0;
@@ -365,7 +363,6 @@ export default function game(window, document) {
     }
 
     function getGroupByElementIndex(centerIndex) {
-        // Если сам стартовый элемент уже скрыт (перенесен), группа пустая
         if (!isCellStillInMatrix(centerIndex)) {
             return new Set();
         }
@@ -373,20 +370,20 @@ export default function game(window, document) {
         // 1. ПРОВЕРКА КЭША С ВАЛИДАЦИЕЙ СТЕЙТА
         if (elementGroupsCache[centerIndex]) {
             const cachedSet = elementGroupsCache[centerIndex];
-
-            // Оставляем в кэше только те элементы, у которых .visible === true
             const validIndexes = Array.from(cachedSet).filter(idx => isCellStillInMatrix(idx));
 
-            // Если стартовый элемент всё ещё видим, возвращаем отфильтрованный сет
             if (validIndexes.includes(centerIndex)) {
                 elementGroupsCache[centerIndex] = new Set(validIndexes);
                 return elementGroupsCache[centerIndex];
             }
         }
 
-        // 2. ДИНАМИЧЕСКИЙ РАСЧЕТ (если кэш пуст или инвалидирован)
+        // 2. ДИНАМИЧЕСКИЙ РАСЧЕТ С УЧЕТОМ УНИКАЛЬНЫХ ПРОВЕРОК
         const attached = new Set();
+        const visited = new Set(); // Хранит ВСЕ индексы, которые мы уже успели проверить
+
         attached.add(centerIndex);
+        visited.add(centerIndex); // Стартовый элемент считается проверенным и добавленным
 
         function findNeighbors(currentIndex, depth) {
             if (depth > 2) {
@@ -396,7 +393,7 @@ export default function game(window, document) {
             const row = Math.floor(currentIndex / COLS);
             const col = currentIndex % COLS;
 
-            // 8 направлений смещения
+            // 8 направлений смещения вокруг текущего элемента
             const directions = [
                 [-1, -1], [-1, 0], [-1, 1],
                 [ 0, -1], [ 0, 1],
@@ -407,14 +404,16 @@ export default function game(window, document) {
                 const nRow = row + dRow;
                 const nCol = col + dCol;
 
-                // Проверяем границы матрицы
+                // Проверяем геометрические границы матрицы
                 if (nRow >= 0 && nRow < ROWS && nCol >= 0 && nCol < COLS) {
                     const neighborIndex = nRow * COLS + nCol;
 
-                    // Проверяем, что сосед еще не в сете и его .visible === true в стейте
-                    if (!attached.has(neighborIndex) && isCellStillInMatrix(neighborIndex)) {
-                        if (Math.random() < 0.40 / depth) {
-                            attached.add(neighborIndex);
+                    // КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: если этот сосед ЕЩЕ НЕ проверялся вообще и он видим
+                    if (!visited.has(neighborIndex) && isCellStillInMatrix(neighborIndex)) {
+                        visited.add(neighborIndex); // Помечаем как проверенный ОДИН раз на всю игру
+
+                        if (Math.random() < (0.45/depth)) {
+                            attached.add(neighborIndex); // Элемент успешно прилип
 
                             // Рекурсивно смотрим соседей соседа (шаг 2)
                             findNeighbors(neighborIndex, depth + 1);
@@ -424,10 +423,10 @@ export default function game(window, document) {
             }
         }
 
-        // Запускаем расчет
+        // Запускаем расчет (depth = 1)
         findNeighbors(centerIndex, 1);
 
-        // Сохраняем актуальный результат в кэш
+        // Сохраняем честно рассчитанный результат в кэш
         elementGroupsCache[centerIndex] = attached;
 
         return attached;
