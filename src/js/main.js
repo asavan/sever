@@ -1,6 +1,6 @@
 import {initMusicPlayer} from "./music.js";
 
-export default function game(window, document) {
+export default function game(window, document, settings) {
     let BASE_COLS = 28;
     let COLS = 28;
     const ROWS = 12;
@@ -578,7 +578,20 @@ export default function game(window, document) {
                 }
             });
 
-            updateBinProgress(binIndex, dragGroup.length);
+            if (settings.difficulty === 1) {
+                const leader = dragGroup.find(item => item.isLeader);
+                console.log(leader);
+                const vLeader = virtualMatrix.at(leader.vIdx);
+                if (vLeader.value % 5 === (binIndex + 1) % 5) {
+                    updateBinProgress(binIndex, dragGroup.length);
+                } else {
+                    const reducedCount = Math.floor(dragGroup.length / 5);
+                    updateBinProgress(binIndex, reducedCount);
+                }
+            } else {
+                updateBinProgress(binIndex, dragGroup.length);
+            }
+
             renderViewport();
         } else {
             dragGroup.forEach(item => {
