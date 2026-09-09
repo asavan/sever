@@ -58,7 +58,7 @@ export default function game(window, document, settings) {
         removedCount = 0;
         scoreCount = 0;
         binProgress = Array(5).fill(0);
-        elementGroupsCache= {};
+        elementGroupsCache = {};
         currentZoomIndex = 0;
         cameraColOffset = 0;
         cameraRowOffset = 0;
@@ -397,8 +397,8 @@ export default function game(window, document, settings) {
             // 8 направлений смещения вокруг текущего элемента
             const directions = [
                 [-1, -1], [-1, 0], [-1, 1],
-                [ 0, -1], [ 0, 1],
-                [ 1, -1], [ 1, 0], [ 1, 1]
+                [0, -1], [0, 1],
+                [1, -1], [1, 0], [1, 1]
             ];
 
             for (const [dRow, dCol] of directions) {
@@ -413,7 +413,7 @@ export default function game(window, document, settings) {
                     if (!visited.has(neighborIndex) && isCellStillInMatrix(neighborIndex)) {
                         visited.add(neighborIndex); // Помечаем как проверенный ОДИН раз на всю игру
 
-                        if (Math.random() < (0.45/depth)) {
+                        if (Math.random() < (0.45 / depth)) {
                             attached.add(neighborIndex); // Элемент успешно прилип
 
                             // Рекурсивно смотрим соседей соседа (шаг 2)
@@ -648,12 +648,11 @@ export default function game(window, document, settings) {
     function updateBinProgress(binIndex, count, score) {
         removedCount += count;
         scoreCount += score;
-        const binCapacity = TOTAL_NUMBERS / 5;
-        const percentPerItem = 100 / binCapacity;
-
         const currentProgress = binProgress.at(binIndex);
-        const newProgress = Math.min(100, Math.floor(currentProgress + (count * percentPerItem)));
-        binProgress.splice(binIndex, 1, newProgress);
+        const updatedProgress = currentProgress + score;
+        const updatedPercent = Math.floor(updatedProgress * binProgress.length * 100 / TOTAL_NUMBERS);
+        const newProgress = Math.min(100, updatedPercent);
+        binProgress[binIndex] = updatedProgress;
 
         document.getElementById("fill-" + (binIndex + 1)).style.width = newProgress + "%";
         document.getElementById("percent-" + (binIndex + 1)).textContent = newProgress + "%";
@@ -661,7 +660,7 @@ export default function game(window, document, settings) {
         const totalPercent = Math.min(100, Math.floor((scoreCount / TOTAL_NUMBERS) * 100));
         totalPercentEl.textContent = totalPercent + "%";
 
-        if (removedCount >= TOTAL_NUMBERS || scoreCount*100 >= TOTAL_NUMBERS*94) {
+        if (removedCount >= TOTAL_NUMBERS || scoreCount * 100 >= TOTAL_NUMBERS * 94) {
             onWin();
         }
     }
