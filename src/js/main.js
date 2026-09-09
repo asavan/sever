@@ -382,8 +382,7 @@ export default function game(window, document, settings) {
         const attached = new Set();
         const visited = new Set(); // Хранит ВСЕ индексы, которые мы уже успели проверить
 
-        attached.add(centerIndex);
-        visited.add(centerIndex); // Стартовый элемент считается проверенным и добавленным
+        visited.add(centerIndex);
 
         function findNeighbors(currentIndex, depth) {
             if (depth > 2) {
