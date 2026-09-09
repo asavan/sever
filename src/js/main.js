@@ -13,6 +13,7 @@ export default function game(window, document, settings) {
     const winScreen = document.getElementById("win-screen");
 
     let removedCount = 0;
+    let scoreCount = 0;
     let binProgress = Array(5).fill(0);
     let elementGroupsCache = {};
     let virtualMatrix = [];
@@ -55,6 +56,7 @@ export default function game(window, document, settings) {
         grid.innerHTML = "";
         virtualMatrix = [];
         removedCount = 0;
+        scoreCount = 0;
         binProgress = Array(5).fill(0);
         elementGroupsCache= {};
         currentZoomIndex = 0;
@@ -579,16 +581,15 @@ export default function game(window, document, settings) {
 
             if (settings.difficulty === 1) {
                 const leader = dragGroup.find(item => item.isLeader);
-                console.log(leader);
                 const vLeader = virtualMatrix.at(leader.vIdx);
                 if (vLeader.value % 5 === (binIndex + 1) % 5) {
-                    updateBinProgress(binIndex, dragGroup.length);
+                    updateBinProgress(binIndex, dragGroup.length, dragGroup.length);
                 } else {
                     const reducedCount = Math.floor(dragGroup.length / 5);
-                    updateBinProgress(binIndex, reducedCount);
+                    updateBinProgress(binIndex, dragGroup.length, reducedCount);
                 }
             } else {
-                updateBinProgress(binIndex, dragGroup.length);
+                updateBinProgress(binIndex, dragGroup.length, dragGroup.length);
             }
 
             renderViewport();
@@ -644,8 +645,9 @@ export default function game(window, document, settings) {
         }, 300);
     }
 
-    function updateBinProgress(binIndex, count) {
+    function updateBinProgress(binIndex, count, score) {
         removedCount += count;
+        scoreCount += score;
         const binCapacity = TOTAL_NUMBERS / 5;
         const percentPerItem = 100 / binCapacity;
 
@@ -656,10 +658,10 @@ export default function game(window, document, settings) {
         document.getElementById("fill-" + (binIndex + 1)).style.width = newProgress + "%";
         document.getElementById("percent-" + (binIndex + 1)).textContent = newProgress + "%";
 
-        const totalPercent = Math.min(100, Math.floor((removedCount / TOTAL_NUMBERS) * 100));
+        const totalPercent = Math.min(100, Math.floor((scoreCount / TOTAL_NUMBERS) * 100));
         totalPercentEl.textContent = totalPercent + "%";
 
-        if (removedCount >= TOTAL_NUMBERS) {
+        if (removedCount >= TOTAL_NUMBERS || scoreCount*100 >= TOTAL_NUMBERS*94) {
             onWin();
         }
     }
