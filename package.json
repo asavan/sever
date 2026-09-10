@@ -28,6 +28,6 @@
   },
   "homepage": "https://asavan.github.io/sever/",
   "devDependencies": {
-    "devdeps": "github:asavan/dev-deps#v0.2.0"
+    "devdeps": "github:asavan/dev-deps#v0.3.0"
   }
 }
